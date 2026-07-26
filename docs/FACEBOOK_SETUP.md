@@ -1,6 +1,6 @@
 # Facebook Integration Setup Guide
 
-This guide walks you through setting up Facebook features for Clear Flow.
+This guide walks you through setting up Facebook features for Anchor Drops.
 
 > **For the loyalty/rewards + webhook go-live, follow [`messenger-setup.md`](messenger-setup.md) — it is the authoritative, current checklist.** It also requires `FB_APP_SECRET` (webhook signature verification) and the `messaging_referrals` subscription, both needed for the confirmation-page "link Messenger" deep-link to auto-bind. This general guide below covers the Pixel and chat plugin.
 
@@ -24,7 +24,7 @@ This guide walks you through setting up Facebook features for Clear Flow.
 1. Go to [Facebook Developers](https://developers.facebook.com)
 2. Click **My Apps** → **Create App**
 3. Select **Business** type
-4. Enter app name (e.g., "Clear Flow")
+4. Enter app name (e.g., "Anchor Drops")
 5. Select your Facebook Page
 
 ---
@@ -57,7 +57,7 @@ This guide walks you through setting up Facebook features for Clear Flow.
 
 ### Whitelist Your Domain
 1. In Messenger Settings, scroll to **Whitelisted Domains**
-2. Add your website URL (e.g., `https://clearflow.ph`)
+2. Add your website URL (e.g., `https://anchordrops.ph`)
 3. Click **Save**
 
 ### Customize Chat Plugin (Optional)

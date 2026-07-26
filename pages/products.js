@@ -13,7 +13,7 @@ const payments = [
 
 export default function Products() {
   return (
-    <Layout title="Products & Pricing — Clear Flow">
+    <Layout title="Products & Pricing — Anchor Drops">
       <section className="max-w-6xl mx-auto px-4 pt-14 pb-6 reveal">
         <span className="section-pill mb-5 inline-block">Our Products</span>
         <h1 className="font-editorial text-4xl md:text-5xl font-bold leading-[1.08] tracking-tight text-clay-ink">

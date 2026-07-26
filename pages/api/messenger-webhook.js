@@ -151,7 +151,7 @@ async function handleMessage(senderPsid, messageText) {
 
   // Fallback: guide customer to use their Order ID
   await sendReply(senderPsid,
-    `👋 Hi! I'm the Clear Flow assistant.\n\n` +
+    `👋 Hi! I'm the Anchor Drops assistant.\n\n` +
     `To receive order updates here, send me your Order ID.\n\n` +
     `You can find your Order ID on your order confirmation page, or look it up at our website using your phone number. 💧`
   );
@@ -160,7 +160,7 @@ async function handleMessage(senderPsid, messageText) {
 async function handlePostback(senderPsid, payload) {
   if (payload === 'GET_STARTED') {
     await sendReply(senderPsid,
-      `👋 Welcome to Clear Flow!\n\n` +
+      `👋 Welcome to Anchor Drops!\n\n` +
       `We deliver fresh purified water right to your door.\n\n` +
       `To get order updates here, send me your Order ID. You can find it on your confirmation page after placing an order.\n\n` +
       `Questions? Just type your message and we'll get back to you! 💧`

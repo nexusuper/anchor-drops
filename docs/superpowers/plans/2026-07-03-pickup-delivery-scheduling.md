@@ -397,7 +397,7 @@ const PICKUP_SMS_MESSAGES = {
   picked_up: (name, deliveryDate, deliveryTime) =>
     `Hi ${name}! We've picked up your empty containers. Your refilled water will be delivered on ${deliveryDate} at ${deliveryTime}. 🛵`,
   delivered: (name) =>
-    `Hi ${name}! Your refilled water has been delivered. 🎉 Thank you for choosing Clear Flow!`,
+    `Hi ${name}! Your refilled water has been delivered. 🎉 Thank you for choosing Anchor Drops!`,
 };
 
 const PICKUP_MESSENGER_MESSAGES = {
@@ -406,7 +406,7 @@ const PICKUP_MESSENGER_MESSAGES = {
   picked_up: (name, deliveryDate, deliveryTime) =>
     `🛵 Hi ${name}! We've picked up your empty containers.\n\nYour refilled water will be delivered on ${deliveryDate} at ${deliveryTime}. 💧`,
   delivered: (name) =>
-    `🎉 Hi ${name}! Your refilled water has been delivered.\n\nThank you for choosing Clear Flow! 💧`,
+    `🎉 Hi ${name}! Your refilled water has been delivered.\n\nThank you for choosing Anchor Drops! 💧`,
 };
 
 export function buildPickupStatusMessage(pickup, status, channel) {

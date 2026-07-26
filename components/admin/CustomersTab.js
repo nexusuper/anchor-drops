@@ -117,7 +117,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
   async function nudgeReorder(c) {
     setNudging(c.phone_normalized);
     try {
-      const msg = `Hi ${c.customer_name}! 💧 It's been a while since your last Clear Flow water delivery. Ready for a refill? Reply here to place your order!`;
+      const msg = `Hi ${c.customer_name}! 💧 It's been a while since your last Anchor Drops water delivery. Ready for a refill? Reply here to place your order!`;
       const res = await fetch(`/api/customers/${c.phone_normalized}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', password: savedPassword },
@@ -271,7 +271,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `clear-flow-customers-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `anchor-drops-customers-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {

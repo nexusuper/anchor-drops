@@ -248,7 +248,7 @@ export default function Order() {
   }
 
   return (
-    <Layout title="Place an Order — Clear Flow">
+    <Layout title="Place an Order — Anchor Drops">
       <section className="max-w-2xl mx-auto px-4 pt-14 pb-4 reveal">
         <span className="section-pill mb-5 inline-block">Place an Order</span>
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
@@ -450,9 +450,9 @@ export default function Order() {
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
                 {form.payment_method === 'gcash' ? (
                   <>
-                    <p className="text-sm text-clay-ink2">Send payment to GCash: <strong>{BUSINESS_PHONE_DISPLAY}</strong> (Clear Flow)</p>
+                    <p className="text-sm text-clay-ink2">Send payment to GCash: <strong>{BUSINESS_PHONE_DISPLAY}</strong> (Anchor Drops)</p>
                     <div className="flex flex-col items-center gap-2 py-2">
-                      <img src="/payment/gcash-qr.jpeg" alt="Clear Flow GCash QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
+                      <img src="/payment/gcash-qr.jpeg" alt="Anchor Drops GCash QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
                       <p className="text-xs text-clay-muted font-semibold">Scan with your GCash app to pay directly</p>
                     </div>
                     <div>
@@ -463,9 +463,9 @@ export default function Order() {
                   </>
                 ) : (
                   <>
-                    <p className="text-sm text-clay-ink2">Send payment to: <strong>BDO 0012-3456-7890</strong> (Clear Flow Water Refill)</p>
+                    <p className="text-sm text-clay-ink2">Send payment to: <strong>BDO 0012-3456-7890</strong> (Anchor Drops Water Refill)</p>
                     <div className="flex flex-col items-center gap-2 py-2">
-                      <img src="/payment/gcash-qr.jpeg" alt="Clear Flow InstaPay QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
+                      <img src="/payment/gcash-qr.jpeg" alt="Anchor Drops InstaPay QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
                       <p className="text-xs text-clay-muted font-semibold">Or scan with your banking app&apos;s InstaPay/QR Ph transfer</p>
                     </div>
                   </>

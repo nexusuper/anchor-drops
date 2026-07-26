@@ -1,11 +1,11 @@
-# Clear Flow — Claymorphism 3D Redesign
+# Anchor Drops — Claymorphism 3D Redesign
 
 **Date:** 2026-06-14
 **Status:** Approved design, ready for implementation plan
 
 ## Goal
 
-Redesign the entire Clear Flow UI in a **claymorphism** ("3D clay") visual
+Redesign the entire Anchor Drops UI in a **claymorphism** ("3D clay") visual
 language that feels lively and tactile while staying **easy to navigate and
 accessible**. Add two signature animated set-pieces: a living hero and an
 animated water-purification pipeline.

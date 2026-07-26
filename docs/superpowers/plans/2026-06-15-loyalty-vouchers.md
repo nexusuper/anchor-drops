@@ -603,7 +603,7 @@ export default function Rewards() {
   const earnedPct = data ? Math.round(data.progressPct * 100) : 0;
 
   return (
-    <Layout title="My Rewards — Clear Flow">
+    <Layout title="My Rewards — Anchor Drops">
       <section className="px-4 pt-8">
         <ClayCard className="max-w-lg mx-auto py-10 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
           <ClayIcon name="party" className="w-10 h-10 mx-auto mb-2" />

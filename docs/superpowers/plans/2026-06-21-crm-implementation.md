@@ -888,7 +888,7 @@ useEffect(() => {
 
 - [ ] **Step 4: Replace the header with a tabbed version**
 
-Replace the header div (the gradient bar with "Clear Flow — Admin") with a version that includes tabs. The header should show the active tab context and include tab buttons for Orders and Customers.
+Replace the header div (the gradient bar with "Anchor Drops — Admin") with a version that includes tabs. The header should show the active tab context and include tab buttons for Orders and Customers.
 
 - [ ] **Step 5: Wrap existing orders content in a conditional**
 

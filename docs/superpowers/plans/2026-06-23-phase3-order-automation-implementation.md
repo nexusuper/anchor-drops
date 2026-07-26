@@ -45,24 +45,24 @@ export const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered'
 
 const SMS_MESSAGES = {
   confirmed: (name, id) =>
-    `Hi ${name}! Your Clear Flow water order (ID: ${id}) has been confirmed and is being prepared. We'll be on our way soon! 💧`,
+    `Hi ${name}! Your Anchor Drops water order (ID: ${id}) has been confirmed and is being prepared. We'll be on our way soon! 💧`,
   out_for_delivery: (name, id) =>
-    `Hi ${name}! Your Clear Flow water order (ID: ${id}) is now OUT FOR DELIVERY! 🛵 Our rider is heading to you. Please be available to receive it. Thank you!`,
+    `Hi ${name}! Your Anchor Drops water order (ID: ${id}) is now OUT FOR DELIVERY! 🛵 Our rider is heading to you. Please be available to receive it. Thank you!`,
   delivered: (name, id) =>
-    `Hi ${name}! Your Clear Flow water order (ID: ${id}) has been delivered. 🎉 Thank you for choosing Clear Flow! Order again anytime.`,
+    `Hi ${name}! Your Anchor Drops water order (ID: ${id}) has been delivered. 🎉 Thank you for choosing Anchor Drops! Order again anytime.`,
   cancelled: (name, id) =>
-    `Hi ${name}, your Clear Flow water order (ID: ${id}) has been cancelled. Please call us at 0912-345-6789 if you have questions.`,
+    `Hi ${name}, your Anchor Drops water order (ID: ${id}) has been cancelled. Please call us at 0912-345-6789 if you have questions.`,
 };
 
 const MESSENGER_MESSAGES = {
   confirmed: (name, id) =>
-    `✅ Hi ${name}! Your Clear Flow water order (#${id}) has been confirmed and is being prepared.\n\nWe'll notify you when it's on the way! 💧`,
+    `✅ Hi ${name}! Your Anchor Drops water order (#${id}) has been confirmed and is being prepared.\n\nWe'll notify you when it's on the way! 💧`,
   out_for_delivery: (name, id) =>
-    `🛵 Hi ${name}! Your Clear Flow water order (#${id}) is now OUT FOR DELIVERY!\n\nOur rider is heading to you. Please be available to receive it. Thank you! 💧`,
+    `🛵 Hi ${name}! Your Anchor Drops water order (#${id}) is now OUT FOR DELIVERY!\n\nOur rider is heading to you. Please be available to receive it. Thank you! 💧`,
   delivered: (name, id) =>
-    `🎉 Hi ${name}! Your Clear Flow water order (#${id}) has been delivered!\n\nThank you for choosing Clear Flow! Order again anytime at our website. 💧`,
+    `🎉 Hi ${name}! Your Anchor Drops water order (#${id}) has been delivered!\n\nThank you for choosing Anchor Drops! Order again anytime at our website. 💧`,
   cancelled: (name, id) =>
-    `❌ Hi ${name}, your Clear Flow water order (#${id}) has been cancelled.\n\nIf you have questions, please reply to this message or call us at 0912-345-6789.`,
+    `❌ Hi ${name}, your Anchor Drops water order (#${id}) has been cancelled.\n\nIf you have questions, please reply to this message or call us at 0912-345-6789.`,
 };
 
 export function buildStatusMessage(order, status, channel) {

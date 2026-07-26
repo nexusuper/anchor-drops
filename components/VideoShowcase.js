@@ -50,7 +50,7 @@ export default function VideoShowcase() {
             playsInline
             preload="metadata"
             className="absolute inset-0 w-full h-full object-cover"
-            aria-label="Clear Flow water purification and delivery process"
+            aria-label="Anchor Drops water purification and delivery process"
           />
 
           {/* Gradient scrim — bottom third only, ink-tinted */}
@@ -67,7 +67,7 @@ export default function VideoShowcase() {
               className="text-[10px] font-bold tracking-[0.22em] uppercase mb-1.5"
               style={{ color: 'rgba(186,230,253,0.9)' }}
             >
-              Clear Flow — Purified Water
+              Anchor Drops — Purified Water
             </p>
             <h3
               className="font-editorial text-white text-xl md:text-2xl font-bold leading-snug tracking-tight"

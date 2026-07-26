@@ -1,4 +1,4 @@
-# Clear Flow — Secure Voucher Redemption
+# Anchor Drops — Secure Voucher Redemption
 
 **Date:** 2026-06-15
 **Status:** Approved design, ready for implementation plan

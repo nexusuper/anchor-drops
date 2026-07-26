@@ -16,7 +16,7 @@ function Section({ title, children }) {
 
 export default function Privacy() {
   return (
-    <Layout title="Privacy Policy — Clear Flow">
+    <Layout title="Privacy Policy — Anchor Drops">
       <section className="max-w-2xl mx-auto px-4 pt-14 pb-4 reveal">
         <span className="section-pill mb-5 inline-block">Privacy Policy</span>
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
@@ -27,7 +27,7 @@ export default function Privacy() {
 
       <div className="max-w-2xl mx-auto px-4 py-10 space-y-7 leading-relaxed">
         <p className="text-clay-ink2">
-          Clear Flow (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) is a purified-water refill and
+          Anchor Drops (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) is a purified-water refill and
           delivery service in Bugo, Cagayan de Oro, Philippines. This policy explains what information we
           collect when you order from us, how we use it, and the choices you have. By placing an order or
           messaging us, you agree to this policy.
@@ -94,7 +94,7 @@ export default function Privacy() {
 
         <Section title="Children">
           <p>
-            Clear Flow is intended for adults arranging household water delivery. It is not directed to
+            Anchor Drops is intended for adults arranging household water delivery. It is not directed to
             children under 13, and we do not knowingly collect their information.
           </p>
         </Section>
@@ -109,7 +109,7 @@ export default function Privacy() {
         <Section title="Contact us">
           <p>
             Questions about your privacy or a request about your data? Message us on our Facebook Page, or call
-            us at <strong>{BUSINESS_PHONE_DISPLAY}</strong>. Clear Flow — Bugo, Cagayan de Oro City, Philippines.
+            us at <strong>{BUSINESS_PHONE_DISPLAY}</strong>. Anchor Drops — Bugo, Cagayan de Oro City, Philippines.
           </p>
         </Section>
       </div>

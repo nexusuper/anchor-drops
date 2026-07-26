@@ -53,7 +53,7 @@ export default function Confirmation() {
   const status = order ? STATUS_LABELS[order.status] : null;
 
   return (
-    <Layout title="Order Confirmed — Clear Flow">
+    <Layout title="Order Confirmed — Anchor Drops">
       <section className="max-w-lg mx-auto px-4 pt-14 pb-4 reveal">
         <div className="mb-5 grid place-items-center w-14 h-14 rounded-[18px] clay-raised-sm" style={{ background: 'linear-gradient(145deg,#e9f6ff,#d3ecfb)' }}>
           <ClayIcon name="check" className="w-7 h-7 text-clay-skydeep" />

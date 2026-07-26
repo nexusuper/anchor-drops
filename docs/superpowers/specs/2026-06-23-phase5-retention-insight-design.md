@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-23
 **Status:** Approved
-**Project:** Clear Flow — purified water refill order/delivery CRM (Philippines)
+**Project:** Anchor Drops — purified water refill order/delivery CRM (Philippines)
 
 ## Goal
 

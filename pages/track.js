@@ -136,7 +136,7 @@ export default function Track() {
   }
 
   return (
-    <Layout title="Track Your Order — Clear Flow">
+    <Layout title="Track Your Order — Anchor Drops">
       <section className="max-w-lg mx-auto px-4 pt-14 pb-4 reveal">
         <span className="section-pill mb-5 inline-block">Order Tracking</span>
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">

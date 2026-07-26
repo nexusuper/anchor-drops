@@ -225,7 +225,7 @@ export default async function handler(req, res) {
     try {
       await sendMessengerMessage(
         linked.messenger_psid,
-        `Your Clear Flow reward code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Enter it at checkout to use your free refill.`
+        `Your Anchor Drops reward code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Enter it at checkout to use your free refill.`
       );
       return res.status(200).json({ sent: true });
     } catch (e) {
@@ -687,7 +687,7 @@ export default function Order() {
   }
 
   return (
-    <Layout title="Place an Order — Clear Flow">
+    <Layout title="Place an Order — Anchor Drops">
       <section className="px-4 pt-8">
         <ClayCard className="max-w-2xl mx-auto py-10 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
           <h1 className="text-3xl font-extrabold">Place Your Order</h1>
@@ -851,7 +851,7 @@ export default function Order() {
 
             {(form.payment_method === 'gcash' || form.payment_method === 'paymaya') && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
-                <p className="text-sm text-sky-700">Send payment to: <strong>0912-345-6789</strong> (Clear Flow)</p>
+                <p className="text-sm text-sky-700">Send payment to: <strong>0912-345-6789</strong> (Anchor Drops)</p>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Your {form.payment_method === 'gcash' ? 'GCash' : 'PayMaya'} Number *</label>
                   <input required value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />

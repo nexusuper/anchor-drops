@@ -1,8 +1,8 @@
-# Clear Flow — Assess & Improve (Route + Rewards + Admin login)
+# Anchor Drops — Assess & Improve (Route + Rewards + Admin login)
 
 ## Context
 
-Clear Flow is a live water-refill order app (Next.js 16 Pages Router, Supabase, Vercel). Owner flagged three worries, and a full audit confirmed them:
+Anchor Drops is a live water-refill order app (Next.js 16 Pages Router, Supabase, Vercel). Owner flagged three worries, and a full audit confirmed them:
 
 1. **Delivery route doesn't map.** The "Route" tab is only an alphabetical barangay checklist ([RouteTab.js](components/admin/RouteTab.js), [orders/route.js](pages/api/orders/route.js)). No map, no lat/lng, no nav. The driver gets a text list, not directions.
 2. **Rewards/vouchers likely don't fire.** Loyalty math is fine, but the whole redemption path depends on a customer's Messenger PSID, and the **only** way PSID gets captured today is the customer *manually messaging the Page with their Order ID*. Nothing on the confirmation page prompts or links them to do it ([confirmation.js](pages/order/confirmation.js) has no `m.me` link). So most customers never bind → voucher codes silently fail → everything falls back to "apply on delivery."
@@ -10,7 +10,7 @@ Clear Flow is a live water-refill order app (Next.js 16 Pages Router, Supabase, 
 
 The rest of the audit was reassuring: security is solid (timing-safe auth, rate limits, signed URLs, HMAC webhooks, strong CSP), API routes are consistently validated, no XSS sinks. Findings are polish, not holes.
 
-**Constraint:** free services only. Chosen approach uses **Google Maps deep-links** (no API key, no billing) and Facebook Messenger (already partially set up). **No changes to the sibling `clear-flow-system` DB repo** — no schema change needed.
+**Constraint:** free services only. Chosen approach uses **Google Maps deep-links** (no API key, no billing) and Facebook Messenger (already partially set up). **No changes to the sibling `anchor-drops-system` DB repo** — no schema change needed.
 
 ---
 

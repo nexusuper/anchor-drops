@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add reorder alerts, full inventory tracking, and an admin dashboard to the Clear Flow CRM.
+**Goal:** Add reorder alerts, full inventory tracking, and an admin dashboard to the Anchor Drops CRM.
 
 **Architecture:** Three independent features over the existing virtual-customer/orders model. Reorder + dashboard are pure SQL-aggregate reads. Inventory adds two tables, three APIs, and one idempotent auto-deduct hook in the order-status PATCH. All UI lives in new tabs/sections of `components/AdminPanel.js`. Charts are inline SVG (no new dependency).
 
@@ -1105,7 +1105,7 @@ git commit -m "feat(inventory): add Inventory tab with restock, adjust, and log"
   async function nudgeReorder(c) {
     setNudging(c.phone_normalized);
     try {
-      const msg = `Hi ${c.customer_name}! 💧 It's been a while since your last Clear Flow water delivery. Ready for a refill? Reply here to place your order!`;
+      const msg = `Hi ${c.customer_name}! 💧 It's been a while since your last Anchor Drops water delivery. Ready for a refill? Reply here to place your order!`;
       const res = await fetch(`/api/customers/${c.phone_normalized}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', password: savedPassword },

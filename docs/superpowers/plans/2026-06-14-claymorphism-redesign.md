@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign every Clear Flow page (and the admin panel) in a claymorphism "3D clay" visual language with an animated hero and an animated water-purification pipeline, while keeping it accessible and easy to navigate.
+**Goal:** Redesign every Anchor Drops page (and the admin panel) in a claymorphism "3D clay" visual language with an animated hero and an animated water-purification pipeline, while keeping it accessible and easy to navigate.
 
 **Architecture:** A foundation layer (self-hosted Google fonts via `next/font`, Tailwind v4 `@theme` tokens, and clay CSS utility classes in `globals.css`) feeds a small set of reusable presentational components (`ClayIcon`, `ClayCard`, `ClayButton`, `AnimatedHero`, `PurifyProcess`). Each page is then rebuilt by composing those components. No backend, data, or business-logic changes.
 
@@ -675,7 +675,7 @@ export default function Navbar() {
                 style={{ background: 'linear-gradient(145deg,#7dd3fc,#0ea5e9)' }}>
             <ClayIcon name="drop" className="w-5 h-5" fill="#fff" stroke="none" />
           </span>
-          <span className="font-display text-xl font-bold text-clay-ink2">Clear Flow</span>
+          <span className="font-display text-xl font-bold text-clay-ink2">Anchor Drops</span>
         </Link>
 
         <div className="hidden md:flex items-center gap-6">
@@ -749,7 +749,7 @@ export default function Footer() {
       <div className="max-w-6xl mx-auto rounded-3xl px-8 py-10 text-clay-ink2 clay-raised">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <h3 className="font-display text-lg font-bold text-clay-ink mb-2">Clear Flow</h3>
+            <h3 className="font-display text-lg font-bold text-clay-ink mb-2">Anchor Drops</h3>
             <p className="text-sm text-clay-muted">Fresh, clean water delivered to your doorstep. No account needed — just order and we deliver.</p>
           </div>
           <div>
@@ -764,13 +764,13 @@ export default function Footer() {
             <h4 className="font-display font-semibold text-clay-ink mb-2">Contact</h4>
             <ul className="space-y-2 text-sm text-clay-muted">
               <li className="flex items-center gap-2"><ClayIcon name="phone" className="w-4 h-4 text-clay-sky" /> 0912-345-6789</li>
-              <li className="flex items-center gap-2"><ClayIcon name="chat" className="w-4 h-4 text-clay-sky" /> clearflow@email.com</li>
+              <li className="flex items-center gap-2"><ClayIcon name="chat" className="w-4 h-4 text-clay-sky" /> anchordrops@email.com</li>
               <li className="flex items-center gap-2"><ClayIcon name="info" className="w-4 h-4 text-clay-sky" /> Mon–Sat, 7AM–6PM</li>
             </ul>
           </div>
         </div>
         <div className="border-t border-sky-100 text-center text-clay-muted text-xs pt-5 mt-6">
-          © {new Date().getFullYear()} Clear Flow. All rights reserved.
+          © {new Date().getFullYear()} Anchor Drops. All rights reserved.
         </div>
       </div>
     </footer>
@@ -857,11 +857,11 @@ function Jug() {
 
 export default function Home() {
   return (
-    <Layout title="Clear Flow — Pure Water Delivery">
+    <Layout title="Anchor Drops — Pure Water Delivery">
       <AnimatedHero />
 
       <section className="max-w-6xl mx-auto px-4 py-16">
-        <h2 className="text-3xl font-bold text-center text-clay-ink mb-10">Why Choose Clear Flow?</h2>
+        <h2 className="text-3xl font-bold text-center text-clay-ink mb-10">Why Choose Anchor Drops?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {features.map((f) => (
             <ClayCard key={f.title} className="p-7 text-center">
@@ -962,7 +962,7 @@ const payments = [
 
 export default function Products() {
   return (
-    <Layout title="Products & Pricing — Clear Flow">
+    <Layout title="Products & Pricing — Anchor Drops">
       <section className="px-4 pt-8">
         <ClayCard className="max-w-6xl mx-auto py-12 text-center text-white" style={{ background: 'linear-gradient(160deg,#7dd3fc,#0ea5e9)' }}>
           <h1 className="text-4xl font-extrabold mb-2">Products &amp; Pricing</h1>

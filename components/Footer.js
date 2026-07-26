@@ -56,7 +56,7 @@ export default function Footer() {
                 </a>
               </li>
               <li className="flex items-center gap-2.5 text-sm font-semibold text-clay-muted">
-                <ClayIcon name="chat" className="w-4 h-4 text-clay-sky shrink-0" /> clearflow@email.com
+                <ClayIcon name="chat" className="w-4 h-4 text-clay-sky shrink-0" /> anchordrops@email.com
               </li>
               <li className="flex items-center gap-2.5 text-sm font-semibold text-clay-muted">
                 <ClayIcon name="info" className="w-4 h-4 text-clay-sky shrink-0" /> Mon–Sat, 7AM–6PM
@@ -66,7 +66,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 pt-6 border-t border-sky-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-semibold text-clay-muted">
-          <span>© {new Date().getFullYear()} Clear Flow. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Anchor Drops. All rights reserved.</span>
           <span className="flex items-center gap-1.5">
             <ClayIcon name="chat" className="w-4 h-4 text-clay-sky shrink-0" />
             Chat with us on Facebook anytime

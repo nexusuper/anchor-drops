@@ -150,7 +150,7 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
       <div className="max-w-lg mx-auto">
         <div className="clay-raised rounded-3xl p-6 print:shadow-none print:rounded-none" id="pos-receipt">
           <div className="text-center mb-4">
-            <h2 className="text-xl font-bold text-clay-ink font-display">Clear Flow</h2>
+            <h2 className="text-xl font-bold text-clay-ink font-display">Anchor Drops</h2>
             <p className="text-xs text-clay-ink/60">{receipt.transaction_id} &middot; {new Date(receipt.created_at).toLocaleString()}</p>
           </div>
           <div className="text-sm text-clay-ink mb-3">

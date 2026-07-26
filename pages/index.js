@@ -45,7 +45,7 @@ function Jug() {
 
 export default function Home() {
   return (
-    <Layout title="Clear Flow — Scheduled Water Delivery, Tracked & Rewarded">
+    <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded">
       <AnimatedHero />
 
       {/* Trust badges */}
@@ -71,12 +71,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Why Clear Flow — editorial split layout */}
+      {/* Why Anchor Drops — editorial split layout */}
       <section className="max-w-6xl mx-auto px-4 py-16">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-14 items-start">
           {/* Sticky heading column */}
           <div className="reveal lg:sticky lg:top-28">
-            <span className="section-pill mb-5 inline-block">Why Clear Flow</span>
+            <span className="section-pill mb-5 inline-block">Why Anchor Drops</span>
             <h2 className="font-editorial text-4xl md:text-5xl font-bold text-clay-ink leading-[1.08] mb-4">
               Convenience,<br />built in.
             </h2>

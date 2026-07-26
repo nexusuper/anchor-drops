@@ -1,4 +1,4 @@
-# Clear Flow — Loyalty Vouchers (Free Refill Every 10 Gallons)
+# Anchor Drops — Loyalty Vouchers (Free Refill Every 10 Gallons)
 
 **Date:** 2026-06-15
 **Status:** Approved design, ready for implementation plan

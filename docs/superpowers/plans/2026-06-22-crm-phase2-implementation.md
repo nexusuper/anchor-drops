@@ -613,7 +613,7 @@ async function exportCSV() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `clear-flow-customers-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `anchor-drops-customers-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   } catch (e) {

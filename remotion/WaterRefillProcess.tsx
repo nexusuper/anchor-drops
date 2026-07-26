@@ -414,7 +414,7 @@ const IntroScene: React.FC = () => {
           lineHeight: 1,
         }}
       >
-        Clear Flow
+        Anchor Drops
       </div>
       <div
         style={{

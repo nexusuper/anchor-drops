@@ -2,7 +2,7 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import Head from 'next/head';
 
-export default function Layout({ children, title = 'Clear Flow — Pure Water Delivery' }) {
+export default function Layout({ children, title = 'Anchor Drops — Pure Water Delivery' }) {
   return (
     <>
       <Head>

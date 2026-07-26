@@ -1,4 +1,4 @@
-# CRM — Customer Profiles for Clear Flow
+# CRM — Customer Profiles for Anchor Drops
 
 **Date:** 2026-06-21
 **Status:** Approved

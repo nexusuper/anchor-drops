@@ -100,7 +100,7 @@ The actual CSV conversion happens client-side to avoid adding a CSV library. The
 ### UI Changes
 
 - **Export button**: In the customer list toolbar (next to search/sort), a "Export CSV" button.
-- On click: fetch `/api/customers/export` with current search/sort/tag/segment filters → convert to CSV in the browser → trigger download as `clear-flow-customers-YYYY-MM-DD.csv`.
+- On click: fetch `/api/customers/export` with current search/sort/tag/segment filters → convert to CSV in the browser → trigger download as `anchor-drops-customers-YYYY-MM-DD.csv`.
 - Columns: Name, Phone, Total Orders, Total Spent, First Order, Last Order, Segment, Tags.
 
 ## 4. Messenger Quick-Send

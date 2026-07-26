@@ -28,7 +28,7 @@ node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
 
 ## Architecture
 
-**Clear Flow** is an order-and-delivery management app for a purified water refill business in the Philippines. Customers place orders through a public storefront; the business owner manages orders, customers, and notifications through a password-protected admin panel.
+**Anchor Drops** is an order-and-delivery management app for a purified water refill business in the Philippines. Customers place orders through a public storefront; the business owner manages orders, customers, and notifications through a password-protected admin panel.
 
 ### Stack
 
@@ -37,7 +37,7 @@ node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
 - **Tailwind CSS v4** with a custom "claymorphism" design system
 - **Zod** for API input validation
 - **Facebook Messenger API** for order notifications and webhook intake
-- **Deployed on Vercel** (linked project: `nexusupers-projects/clear-flow`)
+- **Deployed on Vercel** (linked project: `nexusupers-projects/clear-flow` — still the pre-rename name in the Vercel dashboard; live URL `clear-flow-nine.vercel.app`)
 
 ### Pages Router layout
 
@@ -111,7 +111,7 @@ Admin endpoints are protected by `verifyAdmin(req)` which compares `req.headers[
 
 ### Database
 
-**Schema lives outside this repo** — in the sibling staff-app repo `clear-flow-system`, as SQL migrations under `supabase/migrations/*.sql` (0001..0016). This repo has zero `.sql` files and no runtime table creation; schema changes go in `clear-flow-system`, not here.
+**Schema lives outside this repo** — in the sibling staff-app repo `anchor-drops-system`, as SQL migrations under `supabase/migrations/*.sql` (0001..0016). This repo has zero `.sql` files and no runtime table creation; schema changes go in `anchor-drops-system`, not here.
 
 Live tables (non-exhaustive): `orders`, `customers`, `customer_addresses`, `branches`, `profiles`, `products`, `inventory`, `inventory_log`, `container_ledger`, `container_pickups`, `customer_notes`, `contact_log`, `payments`, `proof_of_delivery`, `reward_codes`, `activity_logs`, `app_settings`, `expenses`, `suppliers`, `machines`, `production_logs`, `quality_tests`, `maintenance_logs`, `cash_reconciliations`, `sync_conflicts`. RLS is enabled on all of them; the service_role client in `lib/supabaseAdmin.js` bypasses it. Most tables carry `branch_id` (multi-branch). Phone numbers are normalized (digits only) and indexed as `phone_normalized`.
 

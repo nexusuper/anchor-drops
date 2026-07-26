@@ -63,13 +63,13 @@ function LoginScreen({ onLogin }) {
 
   return (
     <>
-      <Head><title>Admin — Clear Flow</title></Head>
+      <Head><title>Admin — Anchor Drops</title></Head>
       <div className="min-h-screen bg-clay-bg flex items-center justify-center px-4">
         <div className="clay-raised rounded-3xl p-8 w-full max-w-sm">
           <div className="text-center mb-6">
             <ClayIcon name="lock" className="w-10 h-10 mx-auto mb-2 text-clay-sky" />
             <h1 className="text-2xl font-bold text-clay-ink font-display">Admin Panel</h1>
-            <p className="text-gray-400 text-sm">Clear Flow Order Management</p>
+            <p className="text-gray-400 text-sm">Anchor Drops Order Management</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
@@ -362,7 +362,7 @@ export default function AdminPanel() {
 
   return (
     <>
-      <Head><title>Admin — Clear Flow</title></Head>
+      <Head><title>Admin — Anchor Drops</title></Head>
       <div className="min-h-screen bg-clay-bg">
 
         {/* Global error banner */}
@@ -379,7 +379,7 @@ export default function AdminPanel() {
         <div className="text-white" style={{ background: 'linear-gradient(160deg,#38bdf8,#0284c7)' }}>
           <div className="px-6 py-4 flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold">Clear Flow — Admin</h1>
+              <h1 className="text-xl font-bold">Anchor Drops — Admin</h1>
               <p className="text-sky-200 text-sm">
                 {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? "Today's deliveries" : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? 'Payment screenshots' : 'Business overview'}
               </p>

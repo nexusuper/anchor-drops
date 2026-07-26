@@ -32,7 +32,7 @@ export default function Rewards() {
   const earnedPct = data ? Math.round(data.progressPct * 100) : 0;
 
   return (
-    <Layout title="My Rewards — Clear Flow">
+    <Layout title="My Rewards — Anchor Drops">
       <section className="max-w-lg mx-auto px-4 pt-14 pb-4 reveal">
         <span className="section-pill mb-5 inline-block">Loyalty Rewards</span>
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">

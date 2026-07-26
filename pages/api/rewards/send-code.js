@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     if (error) throw error;
 
     try {
-      await sendMessengerMessage(linked.messenger_psid, `Your Clear Flow reward code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Enter it at checkout to use your free refill.`);
+      await sendMessengerMessage(linked.messenger_psid, `Your Anchor Drops reward code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Enter it at checkout to use your free refill.`);
       return res.status(200).json({ sent: true });
     } catch (e) {
       await supabase.from('reward_codes').delete().eq('id', inserted.id);
