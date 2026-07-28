@@ -37,7 +37,7 @@ node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
 - **Tailwind CSS v4** with a custom "claymorphism" design system
 - **Zod** for API input validation
 - **Facebook Messenger API** for order notifications and webhook intake
-- **Deployed on Vercel** (linked project: `nexusupers-projects/clear-flow` — still the pre-rename name in the Vercel dashboard; live URL `clear-flow-nine.vercel.app`)
+- **Deployed on Vercel** (linked project: `nexusupers-projects/anchor-drops`). The live URL is still `clear-flow-nine.vercel.app`: renaming the project did not move that alias, and it is the host the Facebook Messenger webhook points at, so it stays until an `anchor-drops` alias is added and the Meta app dashboard is re-pointed.
 
 ### Pages Router layout
 
