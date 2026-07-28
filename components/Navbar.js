@@ -23,7 +23,7 @@ export default function Navbar() {
           <span className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 clay-raised-sm">
             <ClayIcon name="drop" className="w-4 h-4" fill="#38bdf8" stroke="none" />
             <span className="font-editorial font-bold text-sm tracking-tight text-clay-ink">
-              Clear <span className="text-clay-skydeep">Flow</span>
+              Anchor <span className="text-clay-skydeep">Drops</span>
             </span>
           </span>
         </Link>
