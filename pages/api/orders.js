@@ -40,6 +40,9 @@ const OrderSchema = z.object({
   pickupTime: z.string().max(5).optional().nullable(),
   deliveryDate: z.string().max(10).min(1),
   deliveryTime: z.string().max(5).min(1),
+  // Client-generated idempotency key. create_order dedupes on it, so a retry
+  // after a network timeout returns the original order instead of a duplicate.
+  client_order_id: z.string().uuid().optional().nullable(),
   lat: z.coerce.number().gte(-90).lte(90).nullish(),
   lng: z.coerce.number().gte(-180).lte(180).nullish(),
 });
@@ -127,7 +130,7 @@ export default async function handler(req, res) {
       payment_method, gcash_number, reference_number, payment_screenshot,
       notes, reward_requested, reward_code,
       has_empty_containers, pickupDate, pickupTime, deliveryDate, deliveryTime,
-      lat, lng,
+      client_order_id, lat, lng,
     } = parsed.data;
 
     const product = PRODUCTS_BY_ID[product_type];
@@ -215,8 +218,9 @@ export default async function handler(req, res) {
       reward_requested_store = requested;
     }
 
-    const id = crypto.randomUUID();
+    const id = client_order_id || crypto.randomUUID();
 
+    let screenshotSaved = true;
     let screenshotPath = null;
     if (payment_screenshot) {
       const match = /^data:(image\/\w+);base64,(.+)$/.exec(payment_screenshot);
@@ -230,7 +234,10 @@ export default async function handler(req, res) {
         if (uploadErr) {
           console.error('Screenshot upload failed:', uploadErr);
           screenshotPath = null;
+          screenshotSaved = false;
         }
+      } else {
+        screenshotSaved = false;
       }
     }
 
@@ -286,7 +293,10 @@ export default async function handler(req, res) {
       if (pickupErr) console.error('Container pickup insert failed:', pickupErr);
     }
 
-    return res.status(201).json({ id: order.id, order_number: order.order_number, created_at: order.created_at });
+    return res.status(201).json({
+      id: order.id, order_number: order.order_number, created_at: order.created_at,
+      screenshot_saved: screenshotSaved,
+    });
     } catch (err) {
       console.error('Order POST failed:', err);
       return res.status(500).json({ error: 'Failed to place order. Please try again.' });

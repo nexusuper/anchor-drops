@@ -7,6 +7,7 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
+import { STORE_HOURS_LABEL } from '@/lib/scheduling';
 
 const DELIVERY_SLOT_LABELS = {
   pickup: 'Counter pickup',
@@ -24,7 +25,7 @@ const STATUS_LABELS = {
 
 export default function Confirmation() {
   const router = useRouter();
-  const { id } = router.query;
+  const { id, phone, screenshot } = router.query;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,7 +34,10 @@ export default function Confirmation() {
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/orders/${id}`)
+    // The phone is forwarded from the order form so the API returns the full
+    // matched-phone payload (address / phone / payment) instead of the minimal one.
+    const qs = phone ? `?phone=${encodeURIComponent(phone)}` : '';
+    fetch(`/api/orders/${encodeURIComponent(id)}${qs}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setError(d.error);
@@ -48,7 +52,7 @@ export default function Confirmation() {
         setLoading(false);
       })
       .catch(() => { setError('Could not load order'); setLoading(false); });
-  }, [id]);
+  }, [id, phone]);
 
   const status = order ? STATUS_LABELS[order.status] : null;
 
@@ -130,6 +134,14 @@ export default function Confirmation() {
                   <span className="text-clay-muted">Payment</span>
                   <span className="font-medium capitalize">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method}</span>
                 </div>
+                {order.payment_verified != null && order.payment_method !== 'cod' && (
+                  <div className="flex justify-between">
+                    <span className="text-clay-muted">Payment status</span>
+                    <span className={`font-semibold px-2 py-0.5 rounded-full border text-xs ${order.payment_verified ? 'text-green-600 bg-green-50 border-green-200' : 'text-yellow-600 bg-yellow-50 border-yellow-200'}`}>
+                      {order.payment_verified ? 'Verified ✓' : 'Awaiting verification'}
+                    </span>
+                  </div>
+                )}
                 {order.delivery_slot && (
                   <div className="flex justify-between">
                     <span className="text-clay-muted">Delivery Time</span>
@@ -171,13 +183,26 @@ export default function Confirmation() {
               Earning free refills with every order — <Link href="/rewards" className="text-clay-skydeep font-semibold hover:underline">check your rewards</Link>.
             </p>
 
+            {screenshot === '0' && (
+              <ClayCard variant="inset" className="p-4 text-center text-sm font-semibold text-clay-danger">
+                <ClayIcon name="info" className="w-4 h-4 inline mr-1" />
+                We couldn&apos;t save your payment screenshot. Please send it to us on Messenger so we can verify your payment.
+              </ClayCard>
+            )}
+
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep">
-              <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.
-              <br />Expected: <strong>within 2–4 hours</strong> (or same day if ordered before 11AM).
+              {order.phone && (
+                <><ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.<br /></>
+              )}
+              {order.delivery_date ? (
+                <>Scheduled delivery: <strong>{order.delivery_date}{order.delivery_time ? ` at ${order.delivery_time}` : ''}</strong>.</>
+              ) : (
+                <>Store hours: <strong>{STORE_HOURS_LABEL}</strong>.</>
+              )}
             </ClayCard>
 
             <div className="flex flex-col gap-3">
-              <ClayButton href={`/track?id=${order.order_number || order.id}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
+              <ClayButton href={`/track?id=${order.order_number || order.id}${phone ? `&phone=${encodeURIComponent(phone)}` : ''}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
               <ClayButton href="/order" variant="outline" className="w-full">Place Another Order</ClayButton>
               <Link href="/" className="block text-center text-clay-muted hover:text-clay-ink2 py-2 transition-colors text-sm">Back to Home</Link>
             </div>
