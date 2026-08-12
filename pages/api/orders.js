@@ -220,6 +220,33 @@ export default async function handler(req, res) {
 
     const id = client_order_id || crypto.randomUUID();
 
+    // client_order_id is an idempotency key, and create_order returns the
+    // EXISTING row unchanged when one already carries that id. Replaying a
+    // stranger's order id would otherwise sail past the RPC and still run every
+    // side effect below with this request's body — filing a container pickup
+    // that sends a rider to an attacker-supplied address under someone else's
+    // order number, and overwriting their payment proof. Resolve the dedupe here
+    // instead: if the row already exists, this request creates nothing, so it
+    // gets to change nothing either.
+    //
+    // ponytail: a pre-flight read, not a flag returned by the RPC — create_order
+    // returns `orders`, so signalling "was this a dedupe hit" means changing its
+    // return type and every caller (this repo + the staff app). Ceiling: two
+    // genuinely simultaneous retries can both miss this read and both file a
+    // pickup row. That duplicates the SAME customer's own request, so it is an
+    // ops nuisance rather than the impersonation this closes; upgrade to an RPC
+    // out-param if the duplicate rows ever show up in practice.
+    if (client_order_id) {
+      const { data: existing } = await supabase
+        .from('orders').select('id, order_number, created_at').eq('id', client_order_id).single();
+      if (existing) {
+        return res.status(201).json({
+          id: existing.id, order_number: existing.order_number, created_at: existing.created_at,
+          screenshot_saved: true,
+        });
+      }
+    }
+
     let screenshotSaved = true;
     let screenshotPath = null;
     if (payment_screenshot) {
@@ -227,10 +254,14 @@ export default async function handler(req, res) {
       if (match) {
         const [, contentType, base64] = match;
         const ext = contentType === 'image/png' ? 'png' : 'jpg';
-        screenshotPath = `${id}/payment.${ext}`;
+        // Storage key is server-minted and unrelated to the order id: the order
+        // id is client-supplied, so deriving the path from it let anyone holding
+        // another order's id overwrite that customer's GCash proof. upsert:false
+        // so a colliding key fails loudly rather than replacing a stored image.
+        screenshotPath = `${crypto.randomUUID()}/payment.${ext}`;
         const { error: uploadErr } = await supabase.storage
           .from('payment-screenshots')
-          .upload(screenshotPath, Buffer.from(base64, 'base64'), { contentType, upsert: true });
+          .upload(screenshotPath, Buffer.from(base64, 'base64'), { contentType, upsert: false });
         if (uploadErr) {
           console.error('Screenshot upload failed:', uploadErr);
           screenshotPath = null;
