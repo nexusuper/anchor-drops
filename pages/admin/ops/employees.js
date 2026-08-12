@@ -60,7 +60,12 @@ function EmployeesContent() {
   }, [showActivity]);
 
   async function handleDeactivate(p) {
-    if (!confirm(`Deactivate ${p.full_name || p.id}? They will no longer be able to sign in.`)) return;
+    // Deliberately does NOT claim sign-in is blocked: deactivation is only a
+    // `profiles.is_active` flag, and nothing on the auth path reads it —
+    // app_role() in the shared DB (anchor-drops-system migration 0002_rls.sql)
+    // has no is_active term, so RLS still grants this account its role. Closing
+    // that needs a DB change plus an Admin-API ban, tracked in that repo.
+    if (!confirm(`Deactivate ${p.full_name || p.id}? They will be marked inactive, but their sign-in still works until the owner resets it.`)) return;
     try {
       await deactivateEmployee(p.id);
       await loadEmployees();

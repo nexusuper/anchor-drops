@@ -18,7 +18,15 @@ export default function OpsLogin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
-  const next = typeof router.query.next === 'string' ? router.query.next : '/admin/ops';
+  // Internal paths only. Next already throws on a javascript: URL, but an
+  // absolute one would hard-navigate off-origin, turning this page into a
+  // post-login redirector for phishing. `//host` is protocol-relative, so it
+  // must be rejected alongside anything carrying a scheme.
+  const rawNext = router.query.next;
+  const next =
+    typeof rawNext === 'string' && rawNext.startsWith('/') && !rawNext.startsWith('//')
+      ? rawNext
+      : '/admin/ops';
 
   useEffect(() => {
     if (!loading && session) router.replace(next);
