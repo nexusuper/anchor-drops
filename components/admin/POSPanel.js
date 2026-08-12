@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ClayIcon from '../ui/ClayIcon';
+import Receipt from './Receipt';
 import { PRODUCTS, PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
 
 const PAYMENT_METHODS = [
@@ -148,38 +149,7 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
   if (receipt) {
     return (
       <div className="max-w-lg mx-auto">
-        <div className="clay-raised rounded-3xl p-6 print:shadow-none print:rounded-none" id="pos-receipt">
-          <div className="text-center mb-4">
-            <h2 className="text-xl font-bold text-clay-ink font-display">Anchor Drops</h2>
-            <p className="text-xs text-clay-ink/60">{receipt.transaction_id} &middot; {new Date(receipt.created_at).toLocaleString()}</p>
-          </div>
-          <div className="text-sm text-clay-ink mb-3">
-            <p><strong>{receipt.customer_name}</strong> &middot; {receipt.phone}</p>
-            <p className="text-clay-ink/60 capitalize">{receipt.fulfillment_type === 'pickup' ? 'Counter pickup' : 'Delivery'}</p>
-          </div>
-          <div className="border-t border-b border-clay-ink/10 py-3 mb-3 space-y-1">
-            {receipt.lines.map((l) => (
-              <div key={l.order_id} className="flex justify-between text-sm">
-                <span>{l.product_name} &times; {l.quantity}{l.need_container ? ` (+${l.container_quantity} container)` : ''}</span>
-                <span>₱{l.line_total.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between"><span>Subtotal</span><span>₱{receipt.subtotal.toFixed(2)}</span></div>
-            {receipt.delivery_fee > 0 && <div className="flex justify-between"><span>Delivery fee</span><span>₱{receipt.delivery_fee.toFixed(2)}</span></div>}
-            {receipt.voucher_discount_total > 0 && <div className="flex justify-between text-emerald-600"><span>Voucher discount ({receipt.voucher_count_total})</span><span>-₱{receipt.voucher_discount_total.toFixed(2)}</span></div>}
-            <div className="flex justify-between font-bold text-base pt-1 border-t border-clay-ink/10"><span>Total</span><span>₱{receipt.total_amount.toFixed(2)}</span></div>
-            <div className="flex justify-between text-clay-ink/60"><span>Payment</span><span className="capitalize">{receipt.payment_method}</span></div>
-            {receipt.cash_tendered != null && (
-              <>
-                <div className="flex justify-between text-clay-ink/60"><span>Cash tendered</span><span>₱{Number(receipt.cash_tendered).toFixed(2)}</span></div>
-                <div className="flex justify-between text-clay-ink/60"><span>Change due</span><span>₱{Number(receipt.change_due).toFixed(2)}</span></div>
-              </>
-            )}
-          </div>
-          <p className="text-xs text-clay-ink/50 mt-4 text-center">Available vouchers after this sale: {receipt.loyalty_available_after}</p>
-        </div>
+        <Receipt receipt={receipt} />
         <div className="flex gap-3 mt-4 print:hidden">
           <button onClick={() => window.print()} className="flex-1 clay-btn-primary clay-pressable rounded-full py-3 font-display font-semibold">
             <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Print Receipt
