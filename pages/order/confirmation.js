@@ -8,6 +8,7 @@ import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 import { STORE_HOURS_LABEL } from '@/lib/scheduling';
+import { readOrderPhone } from '@/lib/client-storage';
 
 const DELIVERY_SLOT_LABELS = {
   pickup: 'Counter pickup',
@@ -25,7 +26,7 @@ const STATUS_LABELS = {
 
 export default function Confirmation() {
   const router = useRouter();
-  const { id, phone, screenshot } = router.query;
+  const { id, screenshot } = router.query;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -34,8 +35,11 @@ export default function Confirmation() {
 
   useEffect(() => {
     if (!id) return;
-    // The phone is forwarded from the order form so the API returns the full
-    // matched-phone payload (address / phone / payment) instead of the minimal one.
+    // The phone comes from sessionStorage, written by the order form, so the API
+    // returns the full matched-phone payload (address / phone / payment) instead
+    // of the minimal one. It must not be a query param: _app.js sends every URL
+    // to the Facebook Pixel, so `?phone=` would leak it to Meta unhashed.
+    const phone = readOrderPhone();
     const qs = phone ? `?phone=${encodeURIComponent(phone)}` : '';
     fetch(`/api/orders/${encodeURIComponent(id)}${qs}`)
       .then((r) => r.json())
@@ -52,7 +56,7 @@ export default function Confirmation() {
         setLoading(false);
       })
       .catch(() => { setError('Could not load order'); setLoading(false); });
-  }, [id, phone]);
+  }, [id]);
 
   const status = order ? STATUS_LABELS[order.status] : null;
 
@@ -202,7 +206,7 @@ export default function Confirmation() {
             </ClayCard>
 
             <div className="flex flex-col gap-3">
-              <ClayButton href={`/track?id=${order.order_number || order.id}${phone ? `&phone=${encodeURIComponent(phone)}` : ''}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
+              <ClayButton href={`/track?id=${encodeURIComponent(order.order_number || order.id)}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
               <ClayButton href="/order" variant="outline" className="w-full">Place Another Order</ClayButton>
               <Link href="/" className="block text-center text-clay-muted hover:text-clay-ink2 py-2 transition-colors text-sm">Back to Home</Link>
             </div>

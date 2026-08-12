@@ -11,6 +11,9 @@ import {
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
   DELIVERY_ONLY_START, DELIVERY_ONLY_END, STORE_HOURS_LABEL,
 } from '@/lib/scheduling';
+import {
+  DRAFT_KEY, readStored, readIdentity, writeIdentity, clearIdentity, writeOrderPhone,
+} from '@/lib/client-storage';
 
 // Downscales/compresses a photo before storing it as a data URL, so payment
 // screenshots (often multi-MB phone photos) stay small enough for a text column.
@@ -36,8 +39,6 @@ function fileToCompressedDataUrl(file, maxDim = 1024, quality = 0.7) {
   });
 }
 
-const IDENTITY_KEY = 'anchor-drops:identity';
-const DRAFT_KEY = 'anchor-drops:order-draft';
 const IDENTITY_FIELDS = ['customer_name', 'phone', 'address', 'barangay', 'lat', 'lng'];
 
 const EMPTY_FORM = {
@@ -63,20 +64,9 @@ const EMPTY_FORM = {
   delivery_time: '',
 };
 
-// ponytail: storage reads are best-effort — private mode / disabled storage
-// throws, and a blank form is a fine fallback.
-function readStored(storage, key) {
-  try {
-    const raw = window[storage].getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 export default function Order() {
   const router = useRouter();
-  const { product: queryProduct, reorder: queryReorder } = router.query;
+  const { product: queryProduct } = router.query;
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [restoredIdentity, setRestoredIdentity] = useState(false);
@@ -112,7 +102,9 @@ export default function Order() {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     const draft = readStored('sessionStorage', DRAFT_KEY);
-    const identity = readStored('localStorage', IDENTITY_KEY);
+    // This IS the reorder path now — "order the same again" just means landing on
+    // a form already filled from the identity this device saved last time.
+    const identity = readIdentity();
     if (!draft && !identity) return;
     queueMicrotask(() => {
       setForm((f) => ({ ...f, ...(identity || {}), ...(draft || {}), payment_screenshot: '' }));
@@ -130,39 +122,20 @@ export default function Order() {
     } catch { /* storage full or unavailable — the draft is a nicety */ }
   }, [form]);
 
-  function clearIdentity() {
-    try {
-      window.localStorage.removeItem(IDENTITY_KEY);
-      window.sessionStorage.removeItem(DRAFT_KEY);
-    } catch { /* ignore */ }
+  function forgetIdentity() {
+    clearIdentity();
     setRestoredIdentity(false);
     setForm(EMPTY_FORM);
   }
 
-  // One-tap reorder: /order?reorder=<phone> seeds the form from the customer's
-  // last order. The phone gates the response server-side.
-  useEffect(() => {
-    if (!queryReorder) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/orders/by-phone?phone=${encodeURIComponent(queryReorder)}&reorder=1`);
-        if (!res.ok) return;
-        const last = await res.json();
-        if (cancelled || !last.address) return;
-        setForm((f) => ({
-          ...f,
-          phone: queryReorder,
-          customer_name: last.customer_name || f.customer_name,
-          address: last.address,
-          barangay: last.barangay || f.barangay,
-          product_type: last.product_type || f.product_type,
-          quantity: last.quantity || f.quantity,
-        }));
-      } catch { /* reorder is a convenience — a blank form still works */ }
-    })();
-    return () => { cancelled = true; };
-  }, [queryReorder]);
+  // ponytail: reorder seeds from this device's own saved identity (above), not
+  // from a server lookup. It used to be /order?reorder=<phone> hitting
+  // /api/orders/by-phone?reorder=1, which returned full name + street address +
+  // the exact delivery hour to anyone who typed a phone number — a home address
+  // and a when-are-you-home window for a guessable key. Local seeding costs only
+  // CROSS-device reorder. To restore that, verify ownership first with the OTP
+  // flow that already exists: lib/reward-codes.js, pages/api/rewards/send-code.js
+  // and pages/api/rewards/verify-code.js.
 
   // Look up loyalty rewards when the phone number looks complete.
   useEffect(() => {
@@ -323,13 +296,14 @@ export default function Order() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to place order');
-      try {
-        const identity = Object.fromEntries(IDENTITY_FIELDS.map((k) => [k, form[k]]));
-        window.localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
-        window.sessionStorage.removeItem(DRAFT_KEY);
-      } catch { /* storage unavailable — the order still went through */ }
+      writeIdentity(Object.fromEntries(IDENTITY_FIELDS.map((k) => [k, form[k]])));
+      try { window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* nicety */ }
+      // The phone rides in sessionStorage, never the query string — see the note
+      // in lib/client-storage.js. The order id stays in the URL so the
+      // confirmation page remains shareable and bookmarkable.
+      writeOrderPhone(form.phone);
       const screenshotFlag = form.payment_screenshot && data.screenshot_saved === false ? '&screenshot=0' : '';
-      router.push(`/order/confirmation?id=${data.id}&phone=${encodeURIComponent(form.phone)}${screenshotFlag}`);
+      router.push(`/order/confirmation?id=${encodeURIComponent(data.id)}${screenshotFlag}`);
     } catch (err) {
       setError(err.message);
       setLoading(false);
@@ -357,7 +331,7 @@ export default function Order() {
             <div className="flex items-baseline justify-between mb-4">
               <h2 className="text-lg font-editorial font-semibold text-clay-ink2">Your Information</h2>
               {restoredIdentity && (
-                <button type="button" onClick={clearIdentity} className="text-xs font-semibold text-clay-skydeep hover:underline">
+                <button type="button" onClick={forgetIdentity} className="text-xs font-semibold text-clay-skydeep hover:underline">
                   Not you? Clear
                 </button>
               )}
