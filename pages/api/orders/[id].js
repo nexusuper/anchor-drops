@@ -2,7 +2,7 @@ import { getSupabase } from '@/lib/supabaseAdmin';
 import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { verifyAdminSoftLockout, verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { normalizePhone } from '@/lib/loyalty';
+import { normalizePhone, phoneMatches } from '@/lib/loyalty';
 import { buildStatusMessage, NOTIFIABLE_STATUSES } from '@/lib/notifications';
 import { sendMessengerMessage } from '@/lib/facebook';
 import { recordContainerMove } from '@/lib/containers';
@@ -29,6 +29,14 @@ const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 // window twice.
 const legacySlot = (t) => (t === 'am' || t === 'pm' ? t : null);
 
+// ADW = current prefix, CFW = pre-rename Clear Flow orders. Both still resolve;
+// historic order numbers were left in place on the rebrand. The [id] segment
+// accepts either an order_number or the raw UUID, so every lookup in this file
+// picks its column through here.
+const ORDER_NUMBER_RE = /^(ADW|CFW)-[A-Z]+-\d{6}-[A-Z0-9]{4}-\d+$/i;
+const byIdOrNumber = (query, id) =>
+  (ORDER_NUMBER_RE.test(id) ? query.eq('order_number', id.toUpperCase()) : query.eq('id', id));
+
 export default async function handler(req, res) {
   const supabase = getSupabase();
   const { id } = req.query;
@@ -36,17 +44,11 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     if (!readRate(req, res)) return;
 
-    // ADW = current prefix, CFW = pre-rename Clear Flow orders. Both still
-    // resolve; historic order numbers were left in place on the rebrand.
-    const isOrderNumber = /^(ADW|CFW)-[A-Z]+-\d{6}-[A-Z0-9]{4}-\d+$/i.test(id);
-    const { data: order, error } = await supabase.from('orders')
-      .select('*').eq(isOrderNumber ? 'order_number' : 'id', isOrderNumber ? id.toUpperCase() : id).single();
+    const { data: order, error } = await byIdOrNumber(supabase.from('orders').select('*'), id).single();
     if (error || !order) return res.status(404).json({ error: 'Order not found' });
 
     if (!await verifyAdminSoftLockout(req)) {
-      const phone = normalizePhone(req.query.phone);
-      const orderPhone = normalizePhone(order.phone);
-      if (!phone || phone !== orderPhone) {
+      if (!phoneMatches(req.query.phone, order.phone)) {
         return res.status(200).json({
           id: order.id, order_number: order.order_number, status: order.status, created_at: order.created_at,
           product_type: order.product_type, container_size: order.container_size,
@@ -86,18 +88,24 @@ export default async function handler(req, res) {
     // Customer self-cancel, before the admin gate. Requires the order's own
     // phone number and only ever moves a pending order to cancelled — it can
     // neither read the order back nor touch any other field.
+    //
+    // The two halves of the gate have to be independently secret, so this is
+    // driven by the order NUMBER: /api/orders/by-phone deliberately no longer
+    // returns the UUID, and the order number is only ever shown to whoever
+    // placed the order (confirmation page + Messenger receipt).
     const cancelParsed = CancelSchema.safeParse(req.body);
     if (cancelParsed.success && !req.headers['password']) {
-      const { data: order } = await supabase.from('orders')
-        .select('id, phone, status').eq('id', id).single();
+      const { data: order } = await byIdOrNumber(
+        supabase.from('orders').select('id, phone, status'), id
+      ).single();
       if (!order) return res.status(404).json({ error: 'Order not found' });
-      if (normalizePhone(cancelParsed.data.phone) !== normalizePhone(order.phone)) {
+      if (!phoneMatches(cancelParsed.data.phone, order.phone)) {
         return res.status(403).json({ error: 'That phone number does not match this order' });
       }
       if (order.status !== 'pending') {
         return res.status(400).json({ error: 'Only a pending order can be cancelled. Please call us instead.' });
       }
-      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', id).eq('status', 'pending');
+      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id).eq('status', 'pending');
       return res.status(200).json({ success: true });
     }
 
