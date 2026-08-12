@@ -1,7 +1,7 @@
 import { getSupabase } from '@/lib/supabaseAdmin';
 import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import crypto from 'node:crypto';
-import { computeRewards, normalizePhone } from '@/lib/loyalty';
+import { computeRewards, normalizePhone, phoneMatches } from '@/lib/loyalty';
 import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
@@ -236,10 +236,18 @@ export default async function handler(req, res) {
     // pickup row. That duplicates the SAME customer's own request, so it is an
     // ops nuisance rather than the impersonation this closes; upgrade to an RPC
     // out-param if the duplicate rows ever show up in practice.
+    //
+    // The replay also has to prove the phone before it gets the order_number
+    // back: the id alone would otherwise be an oracle turning one handle into
+    // both halves of the self-cancel gate. A genuine retry posts the same body,
+    // so the same phone, and still receives the original order.
     if (client_order_id) {
       const { data: existing } = await supabase
-        .from('orders').select('id, order_number, created_at').eq('id', client_order_id).single();
+        .from('orders').select('id, order_number, created_at, phone').eq('id', client_order_id).single();
       if (existing) {
+        if (!phoneMatches(phone, existing.phone)) {
+          return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
+        }
         return res.status(201).json({
           id: existing.id, order_number: existing.order_number, created_at: existing.created_at,
           screenshot_saved: true,

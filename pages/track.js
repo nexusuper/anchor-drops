@@ -98,11 +98,18 @@ export default function Track() {
   // Cancelling needs the Order ID as well as the phone, and the by-phone lookup
   // deliberately returns neither the order number nor the UUID — otherwise the
   // phone alone would unlock cancellation. So this is set only on the by-id path.
-  const orderRef = order?.order_number || order?.id || '';
+  //
+  // It comes from the handle the visitor typed, not from the response: the API
+  // withholds both handles unless the phone matches, so reading it back would
+  // have made "wrong/absent phone" also mean "cancel button disappears" for the
+  // customer who is holding the correct Order ID.
+  const [loadedId, setLoadedId] = useState('');
+  const orderRef = order ? (order.order_number || order.id || loadedId) : '';
 
   const fetchOrder = useCallback(async (id, phone) => {
     setLoading(true);
     setError('');
+    setLoadedId(id.trim().toUpperCase());
     try {
       const qs = phone && phone.trim() ? `?phone=${encodeURIComponent(phone.trim())}` : '';
       const res = await fetch(`/api/orders/${encodeURIComponent(id.trim().toUpperCase())}${qs}`);
@@ -120,6 +127,7 @@ export default function Track() {
   const fetchByPhone = useCallback(async (raw) => {
     setLoading(true);
     setError('');
+    setLoadedId('');
     try {
       const res = await fetch(`/api/orders/by-phone?phone=${encodeURIComponent(raw.trim())}`);
       const data = await res.json();

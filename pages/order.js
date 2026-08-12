@@ -14,6 +14,7 @@ import {
 import {
   DRAFT_KEY, readStored, readIdentity, writeIdentity, clearIdentity, writeOrderPhone,
 } from '@/lib/client-storage';
+import { uuidv4 } from '@/lib/uuid';
 
 // Downscales/compresses a photo before storing it as a data URL, so payment
 // screenshots (often multi-MB phone photos) stay small enough for a text column.
@@ -273,8 +274,11 @@ export default function Order() {
       return;
     }
     setLoading(true);
-    if (!clientOrderIdRef.current) clientOrderIdRef.current = crypto.randomUUID();
     try {
+      // Inside the try on purpose: this used to sit above it, and on a browser
+      // without crypto.randomUUID it threw uncaught — button stuck loading, no
+      // error, order lost. uuidv4() falls back, and the catch is the backstop.
+      if (!clientOrderIdRef.current) clientOrderIdRef.current = uuidv4();
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

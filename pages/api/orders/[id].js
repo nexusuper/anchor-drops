@@ -6,6 +6,7 @@ import { normalizePhone, phoneMatches } from '@/lib/loyalty';
 import { buildStatusMessage, NOTIFIABLE_STATUSES } from '@/lib/notifications';
 import { sendMessengerMessage } from '@/lib/facebook';
 import { recordContainerMove } from '@/lib/containers';
+import { ORDER_NUMBER_RE } from '@/lib/order-number';
 import { z } from 'zod';
 
 const PatchSchema = z.object({
@@ -29,11 +30,9 @@ const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 // window twice.
 const legacySlot = (t) => (t === 'am' || t === 'pm' ? t : null);
 
-// ADW = current prefix, CFW = pre-rename Clear Flow orders. Both still resolve;
-// historic order numbers were left in place on the rebrand. The [id] segment
-// accepts either an order_number or the raw UUID, so every lookup in this file
-// picks its column through here.
-const ORDER_NUMBER_RE = /^(ADW|CFW)-[A-Z]+-\d{6}-[A-Z0-9]{4}-\d+$/i;
+// The [id] segment accepts either an order_number or the raw UUID, so every
+// lookup in this file picks its column through here. See lib/order-number.js
+// for why the pattern is what it is.
 const byIdOrNumber = (query, id) =>
   (ORDER_NUMBER_RE.test(id) ? query.eq('order_number', id.toUpperCase()) : query.eq('id', id));
 
@@ -49,8 +48,13 @@ export default async function handler(req, res) {
 
     if (!await verifyAdminSoftLockout(req)) {
       if (!phoneMatches(req.query.phone, order.phone)) {
+        // No handle in this payload — not the UUID and not the order_number.
+        // Self-cancel is gated on (handle, phone) and the phone is guessable, so
+        // echoing either handle back to a caller who could not prove the phone
+        // turns "knows one handle" into "knows both halves". The caller already
+        // holds whatever handle it looked up with; it must not learn the other.
         return res.status(200).json({
-          id: order.id, order_number: order.order_number, status: order.status, created_at: order.created_at,
+          status: order.status, created_at: order.created_at,
           product_type: order.product_type, container_size: order.container_size,
           quantity: order.quantity, total_amount: order.total_amount,
           customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,

@@ -58,6 +58,14 @@ clearIdentity();
 assert.equal(readIdentity(), null);
 assert.equal(session.getItem(DRAFT_KEY), null);
 
+// ...and the order phone. "Not you? Clear" on a shared device that left it
+// behind handed the next person the previous customer's number, which /track
+// then used as the cancel phone.
+writeIdentity(IDENTITY);
+writeOrderPhone('09171234567');
+clearIdentity();
+assert.equal(readOrderPhone(), '');
+
 // The phone lives in sessionStorage and never in localStorage — it must not
 // outlive the tab, and it must never end up in a URL the FB Pixel reports.
 assert.equal(readOrderPhone(), '');
@@ -72,6 +80,15 @@ const throwing = {
   removeItem() { throw new Error('denied'); },
 };
 globalThis.window = { localStorage: throwing, sessionStorage: throwing };
+assert.equal(readIdentity(), null);
+assert.equal(readOrderPhone(), '');
+writeIdentity(IDENTITY);
+writeOrderPhone('09171234567');
+clearIdentity();
+
+// No window at all (server render / an accidental import from an API route):
+// explicit guard, not a caught ReferenceError.
+delete globalThis.window;
 assert.equal(readIdentity(), null);
 assert.equal(readOrderPhone(), '');
 writeIdentity(IDENTITY);

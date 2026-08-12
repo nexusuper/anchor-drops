@@ -1,7 +1,7 @@
 import Layout from '@/components/Layout';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { trackPurchase } from '@/pages/_app';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
@@ -32,14 +32,15 @@ export default function Confirmation() {
   const [error, setError] = useState('');
 
   const trackedRef = useRef(false);
+  const [phoneInput, setPhoneInput] = useState('');
 
-  useEffect(() => {
+  const load = useCallback((phone) => {
     if (!id) return;
-    // The phone comes from sessionStorage, written by the order form, so the API
-    // returns the full matched-phone payload (address / phone / payment) instead
-    // of the minimal one. It must not be a query param: _app.js sends every URL
-    // to the Facebook Pixel, so `?phone=` would leak it to Meta unhashed.
-    const phone = readOrderPhone();
+    setLoading(true);
+    setError('');
+    // The phone is a query param on the API call but never on this page's own
+    // URL: _app.js sends every page URL to the Facebook Pixel, so `?phone=`
+    // there would leak it to Meta unhashed.
     const qs = phone ? `?phone=${encodeURIComponent(phone)}` : '';
     fetch(`/api/orders/${encodeURIComponent(id)}${qs}`)
       .then((r) => r.json())
@@ -58,7 +59,19 @@ export default function Confirmation() {
       .catch(() => { setError('Could not load order'); setLoading(false); });
   }, [id]);
 
+  // Normally the phone is already in sessionStorage, written by the order form
+  // one navigation ago, so the API returns the full matched-phone payload. A new
+  // tab or a hard refresh has none of it and silently got the minimal payload
+  // instead — hence the phone form below.
+  // Deferred like the storage reads on /track and /order — reading browser
+  // storage during render breaks hydration, and setState straight from an
+  // effect body cascades renders.
+  useEffect(() => { if (id) queueMicrotask(() => load(readOrderPhone())); }, [id, load]);
+
   const status = order ? STATUS_LABELS[order.status] : null;
+  // The API withholds both handles unless the phone matched, so fall back to the
+  // one already in this page's URL rather than rendering a blank order id.
+  const handle = order?.order_number || order?.id || id || '';
 
   return (
     <Layout title="Order Confirmed — Anchor Drops">
@@ -86,16 +99,53 @@ export default function Confirmation() {
           <div className="space-y-4">
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted mb-1">Your Order ID</p>
-              <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{order.order_number || order.id}</p>
+              <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{handle}</p>
               <p className="text-base font-bold text-clay-ink2 mt-2">⚠ Please write this down or take a screenshot — you&apos;ll need it to track your order.</p>
             </ClayCard>
+
+            {/* Opened in a new tab or hard-refreshed: sessionStorage is empty, so
+                the API served the minimal payload and the phone / address / total
+                are missing. Same affordance as /track — prove the number. */}
+            {!order.phone && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); if (phoneInput.trim()) load(phoneInput.trim()); }}
+                className="clay-inset rounded-3xl p-6"
+              >
+                <label htmlFor="confirm_phone" className="block text-base font-semibold text-clay-ink2 mb-2">
+                  Show my full order details
+                </label>
+                <p className="text-sm text-clay-muted mb-2">
+                  Enter the phone number you ordered with to see your address, total and delivery schedule.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    id="confirm_phone"
+                    value={phoneInput}
+                    onChange={(e) => setPhoneInput(e.target.value)}
+                    placeholder="09XX-XXX-XXXX"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    className="clay-input flex-1 text-lg"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    aria-busy={loading || undefined}
+                    className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60"
+                  >
+                    {loading ? <span className="clay-spinner" aria-hidden="true" /> : 'Show'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             <a href={`tel:${BUSINESS_PHONE_TEL}`} className="flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-3 text-base font-semibold text-clay-skydeep">
               <ClayIcon name="phone" className="w-5 h-5" /> Questions? Call us: {BUSINESS_PHONE_DISPLAY}
             </a>
 
             <a
-              href={`https://m.me/${process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166'}?ref=${order.id}`}
+              href={`https://m.me/${process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166'}?ref=${handle}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 rounded-full px-4 py-3 text-base font-bold text-white"
@@ -206,7 +256,7 @@ export default function Confirmation() {
             </ClayCard>
 
             <div className="flex flex-col gap-3">
-              <ClayButton href={`/track?id=${encodeURIComponent(order.order_number || order.id)}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
+              <ClayButton href={`/track?id=${encodeURIComponent(handle)}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
               <ClayButton href="/order" variant="outline" className="w-full">Place Another Order</ClayButton>
               <Link href="/" className="block text-center text-clay-muted hover:text-clay-ink2 py-2 transition-colors text-sm">Back to Home</Link>
             </div>
