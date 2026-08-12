@@ -4,6 +4,7 @@ import { computeRewards, normalizePhone, maxRedeemable, VOUCHER_VALUE } from '@/
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
+import { recordContainerMove } from '@/lib/containers';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 
@@ -187,8 +188,20 @@ export default async function handler(req, res) {
     createdOrders.push(order);
   }
 
+  // Counter pickups are created already-delivered, so they never pass through
+  // the PATCH-to-delivered hook in orders/[id].js that records the rest. POS
+  // *deliveries* land as 'pending' and are recorded there, not here.
   if (isPickup) {
     for (const line of resolvedLines) {
+      if (line.need_container) {
+        await recordContainerMove(supabase, {
+          phone,
+          orderId: line.order_id,
+          delta: line.container_quantity,
+          kind: 'delivery_out',
+          note: `POS sale ${transaction_id}`,
+        });
+      }
       try {
         const { error: invErr } = await supabase.rpc('adjust_inventory', {
           p_branch_id: DEFAULT_BRANCH_ID,
