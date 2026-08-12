@@ -87,7 +87,7 @@ Writes go through Postgres RPCs, not raw SQL:
 ### Key libs (`lib/`)
 
 - `supabaseAdmin.js` — exports `getSupabase()`, a memoized service_role `createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)`. Server-only, bypasses RLS — never import into browser code. No anon client exists.
-- `auth.js` — timing-safe admin password comparison (`verifyAdmin`) + `verifyAdminWithLockout(req, res)` which adds DB-backed IP lockout (5 failures → 15-min block, clears on success). Use `verifyAdminWithLockout` on all new admin routes.
+- `auth.js` — timing-safe admin password comparison (`verifyAdmin`) + `verifyAdminWithLockout(req, res)` which adds DB-backed IP lockout (5 failures → 15-min block, clears on success). Use `verifyAdminWithLockout` on all new admin routes. `verifyAdmin` returns the **matched staff name** (a truthy string) or `false` — callers test truthiness, never `=== true`.
 - `loyalty.js` — pure loyalty math (gallon counting, voucher computation) — isomorphic, safe for client import
 - `reward-codes.js` — server-only OTP generation and hashing
 - `facebook.js` — Messenger Send API helpers + webhook signature verification
@@ -107,11 +107,13 @@ The UI uses a custom "claymorphism" (soft 3D) style defined in `styles/globals.c
 
 ### Auth model
 
-Admin endpoints are protected by `verifyAdmin(req)` which compares `req.headers['password']` against `ADMIN_PASSWORD` env var using timing-safe comparison. There are no user accounts or sessions — customers order as guests identified by phone number.
+Admin endpoints are protected by `verifyAdmin(req)`, which compares `req.headers['password']` against the configured staff credentials using timing-safe comparison and returns the matched staff **name**. Credentials come from `ADMIN_USERS` (`"owner:pass1,rider1:pass2"`); when it is unset, `ADMIN_PASSWORD` backs a single unnamed `admin` user, which is the legacy behaviour. Both sides are sha256-digested before `timingSafeEqual`, and every candidate is compared so neither password length nor staff count leaks.
+
+There are no user accounts or sessions — customers order as guests identified by phone number. **Phone number is not proof of identity.** A phone is guessable, so it must never be the sole gate on anything that mutates data or discloses PII beyond what a stranger may already see. Customer self-cancel is gated on (order handle + phone) together, and unauthenticated responses deliberately return **no order handle** — see the comment block in `pages/api/orders/by-phone.js`. Use `phoneMatches()` from `lib/loyalty.js` for ownership checks, never a bare `normalizePhone` comparison: `normalizePhone('aaaaaaa')` is `''`, which would match any row with a non-numeric phone.
 
 ### Database
 
-**Schema lives outside this repo** — in the sibling staff-app repo `anchor-drops-system`, as SQL migrations under `supabase/migrations/*.sql` (0001..0016). This repo has zero `.sql` files and no runtime table creation; schema changes go in `anchor-drops-system`, not here.
+**Schema lives outside this repo** — in the sibling staff-app repo `anchor-drops-system`, as SQL migrations under `supabase/migrations/*.sql` (0001..0030). This repo has zero `.sql` files and no runtime table creation; schema changes go in `anchor-drops-system`, not here.
 
 Live tables (non-exhaustive): `orders`, `customers`, `customer_addresses`, `branches`, `profiles`, `products`, `inventory`, `inventory_log`, `container_ledger`, `container_pickups`, `customer_notes`, `contact_log`, `payments`, `proof_of_delivery`, `reward_codes`, `activity_logs`, `app_settings`, `expenses`, `suppliers`, `machines`, `production_logs`, `quality_tests`, `maintenance_logs`, `cash_reconciliations`, `sync_conflicts`. RLS is enabled on all of them; the service_role client in `lib/supabaseAdmin.js` bypasses it. Most tables carry `branch_id` (multi-branch). Phone numbers are normalized (digits only) and indexed as `phone_normalized`.
 
@@ -122,7 +124,8 @@ Payment screenshots are stored in Supabase Storage, bucket `payment-screenshots`
 See `.env.example` for all required vars. Key ones:
 - `SUPABASE_URL` — Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — service_role key, server-only
-- `ADMIN_PASSWORD` — admin panel password
+- `ADMIN_USERS` — named staff credentials, `"owner:pass1,rider1:pass2"` (replaces `ADMIN_PASSWORD` when set)
+- `ADMIN_PASSWORD` — legacy single admin panel password; used only when `ADMIN_USERS` is unset
 - `FB_PAGE_ACCESS_TOKEN` / `FB_VERIFY_TOKEN` / `FB_APP_SECRET` — Messenger integration
 - `FB_WEBHOOK_SECRET` — ManyChat order intake webhook secret
 - `NEXT_PUBLIC_FB_PIXEL_ID` / `NEXT_PUBLIC_FB_PAGE_ID` — client-side Facebook integration
