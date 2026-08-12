@@ -5,11 +5,19 @@ import { rateLimit } from '@/lib/rate-limit';
 import { normalizePhone } from '@/lib/loyalty';
 import { buildStatusMessage, NOTIFIABLE_STATUSES } from '@/lib/notifications';
 import { sendMessengerMessage } from '@/lib/facebook';
+import { recordContainerMove } from '@/lib/containers';
 import { z } from 'zod';
 
 const PatchSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled']).optional(),
   payment_verified: z.boolean().optional(),
+});
+
+// Customer self-cancel: the only non-admin mutation. Phone-gated exactly like
+// the read path — same trust level, and narrowed to pending orders only.
+const CancelSchema = z.object({
+  status: z.literal('cancelled'),
+  phone: z.string().min(7).max(20),
 });
 
 const readRate = rateLimit({ windowMs: 60_000, max: 30 });
@@ -74,6 +82,25 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     if (!adminRate(req, res)) return;
+
+    // Customer self-cancel, before the admin gate. Requires the order's own
+    // phone number and only ever moves a pending order to cancelled — it can
+    // neither read the order back nor touch any other field.
+    const cancelParsed = CancelSchema.safeParse(req.body);
+    if (cancelParsed.success && !req.headers['password']) {
+      const { data: order } = await supabase.from('orders')
+        .select('id, phone, status').eq('id', id).single();
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+      if (normalizePhone(cancelParsed.data.phone) !== normalizePhone(order.phone)) {
+        return res.status(403).json({ error: 'That phone number does not match this order' });
+      }
+      if (order.status !== 'pending') {
+        return res.status(400).json({ error: 'Only a pending order can be cancelled. Please call us instead.' });
+      }
+      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', id).eq('status', 'pending');
+      return res.status(200).json({ success: true });
+    }
+
     if (!await verifyAdminWithLockout(req, res)) return;
 
     const parsed = PatchSchema.safeParse(req.body);
@@ -107,6 +134,10 @@ export default async function handler(req, res) {
           });
         } catch (notifyErr) {
           console.error('Auto Messenger notify failed:', notifyErr);
+          // A PSID that exists but whose send fails (FB's 24h window closes
+          // routinely) has to raise the same "tell them manually" flag as no
+          // PSID at all, or the failure is invisible to the owner.
+          await supabase.from('orders').update({ sms_pending: true }).eq('id', id);
         }
       } else if (NOTIFIABLE_STATUSES.includes(status)) {
         // Notifiable status change but no linked Messenger PSID — flag for staff
@@ -118,6 +149,18 @@ export default async function handler(req, res) {
       // inventory_deducted flag has no equivalent here, but "was it already
       // delivered" is the same idempotency check with one fewer table.
       if (status === 'delivered' && order.status !== 'delivered') {
+        // Containers handed over on this delivery. Same guard as the inventory
+        // deduct, so it is idempotent for the same reason.
+        if (order.need_container) {
+          await recordContainerMove(supabase, {
+            phone: order.phone,
+            customerId: order.customer_id,
+            orderId: order.id,
+            delta: Number(order.container_quantity) || 0,
+            kind: 'delivery_out',
+            note: `order ${order.order_number || order.id} delivered`,
+          });
+        }
         try {
           const { error: invErr } = await supabase.rpc('adjust_inventory', {
             p_branch_id: DEFAULT_BRANCH_ID,
