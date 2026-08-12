@@ -28,13 +28,19 @@ export default function DashboardTab({ savedPassword }) {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { label: 'Revenue (This Month)', value: '₱' + dashboard.kpis.revenueThisMonth.toLocaleString() },
+              { label: 'Expenses (This Month)', value: '₱' + (dashboard.kpis.expensesThisMonth ?? 0).toLocaleString(), tone: 'text-rose-600' },
+              {
+                label: 'Net Profit (This Month)',
+                value: '₱' + (dashboard.kpis.netThisMonth ?? 0).toLocaleString(),
+                tone: (dashboard.kpis.netThisMonth ?? 0) < 0 ? 'text-rose-600' : 'text-emerald-600',
+              },
               { label: 'Orders (This Month)', value: dashboard.kpis.ordersThisMonth },
               { label: 'Active Customers (30d)', value: dashboard.kpis.activeCustomers30d },
               { label: 'Avg Order Value', value: '₱' + dashboard.kpis.avgOrderValue.toLocaleString() },
             ].map((k) => (
               <div key={k.label} className="clay-raised rounded-2xl p-4">
                 <p className="text-xs text-clay-ink/60 font-medium">{k.label}</p>
-                <p className="text-2xl font-bold text-sky-700 mt-1">{k.value}</p>
+                <p className={'text-2xl font-bold mt-1 ' + (k.tone || 'text-sky-700')}>{k.value}</p>
               </div>
             ))}
           </div>
