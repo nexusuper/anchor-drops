@@ -145,6 +145,22 @@ export default async function handler(req, res) {
         await supabase.from('orders').update({ sms_pending: true }).eq('id', id);
       }
 
+      // A delivered order cancelled afterwards (admin PATCH allows any
+      // transition; the customer self-cancel above is pending-only) must undo
+      // its own delivery_out — the customer is not holding those containers.
+      // 'adjustment', not 'pickup_return': no pickup happened. Guarded on the
+      // pre-update status, so cancelling twice reverses once.
+      if (status === 'cancelled' && order.status === 'delivered' && order.need_container) {
+        await recordContainerMove(supabase, {
+          phone: order.phone,
+          customerId: order.customer_id,
+          orderId: order.id,
+          delta: -(Number(order.container_quantity) || 0),
+          kind: 'adjustment',
+          note: `order ${order.order_number || order.id} cancelled after delivery`,
+        });
+      }
+
       // ponytail: guard on the pre-update status, not a new column — old schema's
       // inventory_deducted flag has no equivalent here, but "was it already
       // delivered" is the same idempotency check with one fewer table.

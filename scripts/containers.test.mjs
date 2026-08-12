@@ -49,4 +49,29 @@ function fakeSupabase(inserted) {
   assert.equal(rows.length, 0);
 }
 
+// No double-count: place an order, then deliver it => exactly ONE delivery_out.
+// create_order used to insert its own 'order placed' row (removed in migration
+// 0029), which made every container order book twice. Placement is modelled
+// here as what it now is: a no-op on the ledger.
+{
+  const rows = [];
+  const db = fakeSupabase(rows);
+  // 1. order placed — create_order writes nothing to the ledger.
+  // 2. PATCH to delivered — pages/api/orders/[id].js records the booking.
+  await recordContainerMove(db, {
+    phone: '09171234567', customerId: 'cust-1', orderId: 'o2', delta: 2,
+    kind: 'delivery_out', note: 'order o2 delivered',
+  });
+  const out = rows.filter((r) => r.order_id === 'o2' && r.kind === 'delivery_out');
+  assert.equal(out.length, 1);
+  assert.equal(out.reduce((s, r) => s + r.delta, 0), 2);
+
+  // 3. cancelled after delivery — reversal nets the balance back to zero.
+  await recordContainerMove(db, {
+    phone: '09171234567', customerId: 'cust-1', orderId: 'o2', delta: -2,
+    kind: 'adjustment', note: 'order o2 cancelled after delivery',
+  });
+  assert.equal(rows.reduce((s, r) => s + r.delta, 0), 0);
+}
+
 console.log('containers.test.mjs: all assertions passed');

@@ -185,6 +185,9 @@ export default async function handler(req, res) {
     }
     await supabase.from('orders').update({ status, transaction_id }).eq('id', order.id);
     line.order_id = order.id;
+    // Kept so the ledger row carries customer_id too — the staff app's balance
+    // reads key on it, the website's on phone_normalized.
+    line.customer_id = order.customer_id;
     createdOrders.push(order);
   }
 
@@ -196,6 +199,7 @@ export default async function handler(req, res) {
       if (line.need_container) {
         await recordContainerMove(supabase, {
           phone,
+          customerId: line.customer_id,
           orderId: line.order_id,
           delta: line.container_quantity,
           kind: 'delivery_out',
