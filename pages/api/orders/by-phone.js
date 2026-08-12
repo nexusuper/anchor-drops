@@ -4,7 +4,12 @@ import { rateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 10 });
-const QuerySchema = z.object({ phone: z.string().min(1).max(20) });
+const QuerySchema = z.object({
+  phone: z.string().min(1).max(20),
+  // '1' switches to the reorder payload: the caller is seeding a new order form
+  // with their own last order, so it also returns full name + street address.
+  reorder: z.literal('1').optional(),
+});
 
 // Legacy 'am'/'pm' slot echo — mirror pages/api/orders/[id].js.
 const legacySlot = (t) => (t === 'am' || t === 'pm' ? t : null);
@@ -27,7 +32,7 @@ export default async function handler(req, res) {
   try {
     const { data: rows, error } = await getSupabase()
       .from('orders')
-      .select('id, order_number, status, created_at, product_type, container_size, quantity, total_amount, customer_name, voucher_count, voucher_discount, reward_requested, delivery_date, delivery_time, pickup_date, pickup_time, barangay')
+      .select('id, order_number, status, created_at, product_type, container_size, quantity, total_amount, customer_name, voucher_count, voucher_discount, reward_requested, delivery_date, delivery_time, pickup_date, pickup_time, barangay, address')
       .eq('phone_normalized', phone)
       .gte('created_at', sixtyDaysAgo)
       .order('created_at', { ascending: false })
@@ -37,18 +42,34 @@ export default async function handler(req, res) {
     const order = rows?.[0];
     if (!order) return res.status(404).json({ error: 'No recent order found for that number. Try your Order ID instead.' });
 
+    if (parsed.data.reorder === '1') {
+      return res.status(200).json({
+        id: order.id, order_number: order.order_number, status: order.status, created_at: order.created_at,
+        product_type: order.product_type, container_size: order.container_size,
+        quantity: order.quantity, total_amount: order.total_amount,
+        customer_name: order.customer_name,
+        address: order.address, barangay: order.barangay,
+        voucher_count: order.voucher_count, voucher_discount: order.voucher_discount,
+        reward_requested: order.reward_requested,
+        delivery_slot: legacySlot(order.delivery_time), delivery_date: order.delivery_date,
+        has_empty_containers: !!order.pickup_date,
+        pickup_date: order.pickup_date, pickup_time: order.pickup_time,
+        delivery_time: order.delivery_time,
+      });
+    }
+
+    // Unverified lookup: no schedule and no money. Knowing when someone's
+    // delivery lands is knowing when they're home, so those fields are withheld
+    // until the caller proves the number is theirs (Order ID or reorder seed).
     return res.status(200).json({
       id: order.id, order_number: order.order_number, status: order.status, created_at: order.created_at,
       product_type: order.product_type, container_size: order.container_size,
-      quantity: order.quantity, total_amount: order.total_amount,
+      quantity: order.quantity,
       customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,
       barangay: order.barangay,
       voucher_count: order.voucher_count, voucher_discount: order.voucher_discount,
       reward_requested: order.reward_requested,
-      delivery_slot: legacySlot(order.delivery_time), delivery_date: order.delivery_date,
       has_empty_containers: !!order.pickup_date,
-      pickup_date: order.pickup_date, pickup_time: order.pickup_time,
-      delivery_time: order.delivery_time,
     });
   } catch (err) {
     console.error('Track-by-phone failed:', err);
