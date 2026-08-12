@@ -1,12 +1,14 @@
 import Layout from '@/components/Layout';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { trackPurchase } from '@/pages/_app';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
+import { STORE_HOURS_LABEL } from '@/lib/scheduling';
+import { readOrderPhone } from '@/lib/client-storage';
 
 const DELIVERY_SLOT_LABELS = {
   pickup: 'Counter pickup',
@@ -24,16 +26,23 @@ const STATUS_LABELS = {
 
 export default function Confirmation() {
   const router = useRouter();
-  const { id } = router.query;
+  const { id, screenshot } = router.query;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const trackedRef = useRef(false);
+  const [phoneInput, setPhoneInput] = useState('');
 
-  useEffect(() => {
+  const load = useCallback((phone) => {
     if (!id) return;
-    fetch(`/api/orders/${id}`)
+    setLoading(true);
+    setError('');
+    // The phone is a query param on the API call but never on this page's own
+    // URL: _app.js sends every page URL to the Facebook Pixel, so `?phone=`
+    // there would leak it to Meta unhashed.
+    const qs = phone ? `?phone=${encodeURIComponent(phone)}` : '';
+    fetch(`/api/orders/${encodeURIComponent(id)}${qs}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setError(d.error);
@@ -50,7 +59,19 @@ export default function Confirmation() {
       .catch(() => { setError('Could not load order'); setLoading(false); });
   }, [id]);
 
+  // Normally the phone is already in sessionStorage, written by the order form
+  // one navigation ago, so the API returns the full matched-phone payload. A new
+  // tab or a hard refresh has none of it and silently got the minimal payload
+  // instead — hence the phone form below.
+  // Deferred like the storage reads on /track and /order — reading browser
+  // storage during render breaks hydration, and setState straight from an
+  // effect body cascades renders.
+  useEffect(() => { if (id) queueMicrotask(() => load(readOrderPhone())); }, [id, load]);
+
   const status = order ? STATUS_LABELS[order.status] : null;
+  // The API withholds both handles unless the phone matched, so fall back to the
+  // one already in this page's URL rather than rendering a blank order id.
+  const handle = order?.order_number || order?.id || id || '';
 
   return (
     <Layout title="Order Confirmed — Anchor Drops">
@@ -78,16 +99,53 @@ export default function Confirmation() {
           <div className="space-y-4">
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted mb-1">Your Order ID</p>
-              <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{order.order_number || order.id}</p>
+              <p className="text-4xl font-extrabold text-sky-600 tracking-widest">{handle}</p>
               <p className="text-base font-bold text-clay-ink2 mt-2">⚠ Please write this down or take a screenshot — you&apos;ll need it to track your order.</p>
             </ClayCard>
+
+            {/* Opened in a new tab or hard-refreshed: sessionStorage is empty, so
+                the API served the minimal payload and the phone / address / total
+                are missing. Same affordance as /track — prove the number. */}
+            {!order.phone && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); if (phoneInput.trim()) load(phoneInput.trim()); }}
+                className="clay-inset rounded-3xl p-6"
+              >
+                <label htmlFor="confirm_phone" className="block text-base font-semibold text-clay-ink2 mb-2">
+                  Show my full order details
+                </label>
+                <p className="text-sm text-clay-muted mb-2">
+                  Enter the phone number you ordered with to see your address, total and delivery schedule.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    id="confirm_phone"
+                    value={phoneInput}
+                    onChange={(e) => setPhoneInput(e.target.value)}
+                    placeholder="09XX-XXX-XXXX"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    className="clay-input flex-1 text-lg"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    aria-busy={loading || undefined}
+                    className="clay-btn-primary clay-pressable rounded-full px-5 py-2.5 font-editorial font-semibold disabled:opacity-60"
+                  >
+                    {loading ? <span className="clay-spinner" aria-hidden="true" /> : 'Show'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             <a href={`tel:${BUSINESS_PHONE_TEL}`} className="flex items-center justify-center gap-2 clay-inset rounded-full px-4 py-3 text-base font-semibold text-clay-skydeep">
               <ClayIcon name="phone" className="w-5 h-5" /> Questions? Call us: {BUSINESS_PHONE_DISPLAY}
             </a>
 
             <a
-              href={`https://m.me/${process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166'}?ref=${order.id}`}
+              href={`https://m.me/${process.env.NEXT_PUBLIC_FB_PAGE_ID || '1210958972092166'}?ref=${handle}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 rounded-full px-4 py-3 text-base font-bold text-white"
@@ -130,6 +188,14 @@ export default function Confirmation() {
                   <span className="text-clay-muted">Payment</span>
                   <span className="font-medium capitalize">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method}</span>
                 </div>
+                {order.payment_verified != null && order.payment_method !== 'cod' && (
+                  <div className="flex justify-between">
+                    <span className="text-clay-muted">Payment status</span>
+                    <span className={`font-semibold px-2 py-0.5 rounded-full border text-xs ${order.payment_verified ? 'text-green-600 bg-green-50 border-green-200' : 'text-yellow-600 bg-yellow-50 border-yellow-200'}`}>
+                      {order.payment_verified ? 'Verified ✓' : 'Awaiting verification'}
+                    </span>
+                  </div>
+                )}
                 {order.delivery_slot && (
                   <div className="flex justify-between">
                     <span className="text-clay-muted">Delivery Time</span>
@@ -171,13 +237,26 @@ export default function Confirmation() {
               Earning free refills with every order — <Link href="/rewards" className="text-clay-skydeep font-semibold hover:underline">check your rewards</Link>.
             </p>
 
+            {screenshot === '0' && (
+              <ClayCard variant="inset" className="p-4 text-center text-sm font-semibold text-clay-danger">
+                <ClayIcon name="info" className="w-4 h-4 inline mr-1" />
+                We couldn&apos;t save your payment screenshot. Please send it to us on Messenger so we can verify your payment.
+              </ClayCard>
+            )}
+
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep">
-              <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.
-              <br />Expected: <strong>within 2–4 hours</strong> (or same day if ordered before 11AM).
+              {order.phone && (
+                <><ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.<br /></>
+              )}
+              {order.delivery_date ? (
+                <>Scheduled delivery: <strong>{order.delivery_date}{order.delivery_time ? ` at ${order.delivery_time}` : ''}</strong>.</>
+              ) : (
+                <>Store hours: <strong>{STORE_HOURS_LABEL}</strong>.</>
+              )}
             </ClayCard>
 
             <div className="flex flex-col gap-3">
-              <ClayButton href={`/track?id=${order.order_number || order.id}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
+              <ClayButton href={`/track?id=${encodeURIComponent(handle)}`} className="w-full"><ClayIcon name="search" className="w-4 h-4" /> Track My Order</ClayButton>
               <ClayButton href="/order" variant="outline" className="w-full">Place Another Order</ClayButton>
               <Link href="/" className="block text-center text-clay-muted hover:text-clay-ink2 py-2 transition-colors text-sm">Back to Home</Link>
             </div>

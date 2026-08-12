@@ -4,6 +4,7 @@ import { computeRewards, normalizePhone, maxRedeemable, VOUCHER_VALUE } from '@/
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
+import { recordContainerMove } from '@/lib/containers';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 
@@ -184,11 +185,27 @@ export default async function handler(req, res) {
     }
     await supabase.from('orders').update({ status, transaction_id }).eq('id', order.id);
     line.order_id = order.id;
+    // Kept so the ledger row carries customer_id too — the staff app's balance
+    // reads key on it, the website's on phone_normalized.
+    line.customer_id = order.customer_id;
     createdOrders.push(order);
   }
 
+  // Counter pickups are created already-delivered, so they never pass through
+  // the PATCH-to-delivered hook in orders/[id].js that records the rest. POS
+  // *deliveries* land as 'pending' and are recorded there, not here.
   if (isPickup) {
     for (const line of resolvedLines) {
+      if (line.need_container) {
+        await recordContainerMove(supabase, {
+          phone,
+          customerId: line.customer_id,
+          orderId: line.order_id,
+          delta: line.container_quantity,
+          kind: 'delivery_out',
+          note: `POS sale ${transaction_id}`,
+        });
+      }
       try {
         const { error: invErr } = await supabase.rpc('adjust_inventory', {
           p_branch_id: DEFAULT_BRANCH_ID,

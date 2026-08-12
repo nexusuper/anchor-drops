@@ -1,9 +1,10 @@
 import Layout from '@/components/Layout';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
+import { readOrderPhone, readIdentity } from '@/lib/client-storage';
 
 const STEPS = [
   { key: 'pending', label: 'Order Received', icon: 'clipboard', desc: 'Your order is in our queue.' },
@@ -72,12 +73,46 @@ export default function Track() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
-  const fetchOrder = useCallback(async (id) => {
+  // ponytail: one ref holding "how this order was loaded" so the 30s poll
+  // re-runs the same loader instead of always falling back to the by-id
+  // endpoint (which returns the minimal payload for a phone lookup).
+  const refetchRef = useRef(null);
+
+  // The phone we can prove ownership with — typed into the by-phone form, or
+  // left in sessionStorage by the order form. Read on mount, never from the URL:
+  // _app.js hands every URL to the Facebook Pixel.
+  const [storedPhone, setStoredPhone] = useState('');
+  const [canReorder, setCanReorder] = useState(false);
+  // Deferred like the other storage reads on this page and on /order — browser
+  // storage can't be read during render without breaking hydration.
+  useEffect(() => {
+    queueMicrotask(() => {
+      setStoredPhone(readOrderPhone());
+      setCanReorder(!!readIdentity());
+    });
+  }, []);
+  const cancelPhone = (phoneInput || storedPhone || '').trim();
+
+  // Cancelling needs the Order ID as well as the phone, and the by-phone lookup
+  // deliberately returns neither the order number nor the UUID — otherwise the
+  // phone alone would unlock cancellation. So this is set only on the by-id path.
+  //
+  // It comes from the handle the visitor typed, not from the response: the API
+  // withholds both handles unless the phone matches, so reading it back would
+  // have made "wrong/absent phone" also mean "cancel button disappears" for the
+  // customer who is holding the correct Order ID.
+  const [loadedId, setLoadedId] = useState('');
+  const orderRef = order ? (order.order_number || order.id || loadedId) : '';
+
+  const fetchOrder = useCallback(async (id, phone) => {
     setLoading(true);
     setError('');
+    setLoadedId(id.trim().toUpperCase());
     try {
-      const res = await fetch(`/api/orders/${id.trim().toUpperCase()}`);
+      const qs = phone && phone.trim() ? `?phone=${encodeURIComponent(phone.trim())}` : '';
+      const res = await fetch(`/api/orders/${encodeURIComponent(id.trim().toUpperCase())}${qs}`);
       const data = await res.json();
       if (!res.ok) throw new Error('Order not found. Please check your Order ID.');
       setOrder(data);
@@ -92,6 +127,7 @@ export default function Track() {
   const fetchByPhone = useCallback(async (raw) => {
     setLoading(true);
     setError('');
+    setLoadedId('');
     try {
       const res = await fetch(`/api/orders/by-phone?phone=${encodeURIComponent(raw.trim())}`);
       const data = await res.json();
@@ -108,6 +144,7 @@ export default function Track() {
   function handlePhoneSubmit(e) {
     e.preventDefault();
     if (!phoneInput.trim()) return;
+    refetchRef.current = () => fetchByPhone(phoneInput);
     fetchByPhone(phoneInput);
   }
 
@@ -116,7 +153,9 @@ export default function Track() {
     if (queryId) {
       queueMicrotask(() => {
         setInputId(queryId);
-        fetchOrder(queryId);
+        const phone = readOrderPhone();
+        refetchRef.current = () => fetchOrder(queryId, phone);
+        fetchOrder(queryId, phone);
       });
     }
   }, [queryId, fetchOrder]);
@@ -124,15 +163,38 @@ export default function Track() {
   // Auto-refresh every 30s when tracking active order
   useEffect(() => {
     if (!order || order.status === 'delivered' || order.status === 'cancelled') return;
-    const interval = setInterval(() => fetchOrder(order.id), 30000);
+    const interval = setInterval(() => {
+      // Skip polling a backgrounded tab — it only burns mobile data.
+      if (!document.hidden) refetchRef.current?.();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [order, fetchOrder]);
+  }, [order]);
 
   function handleSubmit(e) {
     e.preventDefault();
     if (!inputId.trim()) return;
     router.push(`/track?id=${inputId.trim().toUpperCase()}`, undefined, { shallow: true });
-    fetchOrder(inputId.trim());
+    refetchRef.current = () => fetchOrder(inputId.trim(), phoneInput);
+    fetchOrder(inputId.trim(), phoneInput);
+  }
+
+  async function handleCancel() {
+    if (!orderRef || !window.confirm('Cancel this order? This cannot be undone.')) return;
+    setCancelling(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(orderRef)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled', phone: cancelPhone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not cancel this order.');
+      await refetchRef.current?.();
+    } catch (err) {
+      setError(err.message || 'Could not cancel this order.');
+    }
+    setCancelling(false);
   }
 
   return (
@@ -155,9 +217,8 @@ export default function Track() {
               id="order_id"
               value={inputId}
               onChange={(e) => setInputId(e.target.value.toUpperCase())}
-              placeholder="e.g. A1B2C3D4"
+              placeholder="e.g. ADW-CDO-260812-A1B2-0001"
               className="clay-input flex-1 font-mono uppercase text-lg"
-              maxLength={8}
             />
             <button
               type="submit"
@@ -206,11 +267,17 @@ export default function Track() {
             <div className="clay-raised rounded-3xl p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-sm text-clay-muted mb-0.5">Order ID</p>
-                  <p className="font-mono font-extrabold text-sky-600 text-xl tracking-widest">{order.order_number || order.id}</p>
+                  <p className="text-sm text-clay-muted mb-0.5">{orderRef ? 'Order ID' : 'Your latest order'}</p>
+                  {orderRef ? (
+                    <p className="font-mono font-extrabold text-sky-600 text-xl tracking-widest">{orderRef}</p>
+                  ) : (
+                    <p className="font-editorial font-bold text-clay-ink text-xl">
+                      {order.customer_name}{order.barangay ? ` · ${order.barangay}` : ''}
+                    </p>
+                  )}
                 </div>
                 <button
-                  onClick={() => fetchOrder(order.id)}
+                  onClick={() => refetchRef.current?.()}
                   className="text-sky-500 hover:text-sky-700 text-sm font-medium clay-raised-sm rounded-full px-3 py-2"
                 >
                   <ClayIcon name="refresh" className="w-4 h-4 inline" /> Refresh
@@ -222,7 +289,23 @@ export default function Track() {
                 {(order.address || order.barangay) && (
                   <div><span className="font-medium text-clay-ink2">{order.address ? 'Address:' : 'Area:'}</span> {[order.address, order.barangay].filter(Boolean).join(', ')}</div>
                 )}
-                <div><span className="font-medium text-clay-ink2">Total:</span> <span className="text-sky-600 font-bold">₱{order.total_amount}</span></div>
+                {order.pickup_date && (
+                  <div><span className="font-medium text-clay-ink2">Pickup:</span> {order.pickup_date} {order.pickup_time}</div>
+                )}
+                {order.delivery_date && (
+                  <div><span className="font-medium text-clay-ink2">Delivery:</span> {order.delivery_date} {order.delivery_time}</div>
+                )}
+                {order.total_amount != null && (
+                  <div><span className="font-medium text-clay-ink2">Total:</span> <span className="text-sky-600 font-bold">₱{order.total_amount}</span></div>
+                )}
+                {order.payment_verified != null && (
+                  <div>
+                    <span className="font-medium text-clay-ink2">Payment:</span>{' '}
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${order.payment_verified ? 'text-green-600 bg-green-50 border-green-200' : 'text-yellow-600 bg-yellow-50 border-yellow-200'}`}>
+                      {order.payment_verified ? 'Verified ✓' : 'Awaiting verification'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <StatusStepper status={order.status} />
@@ -241,8 +324,28 @@ export default function Track() {
               </div>
             )}
 
+            {order.status === 'pending' && (orderRef && cancelPhone ? (
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={cancelling}
+                aria-busy={cancelling || undefined}
+                className="w-full clay-inset rounded-full px-4 py-3 text-sm font-semibold text-clay-danger disabled:opacity-60"
+              >
+                {cancelling ? 'Cancelling…' : 'Cancel this order'}
+              </button>
+            ) : (
+              <p className="clay-inset rounded-3xl p-4 text-center text-sm text-clay-muted">
+                To cancel this order, enter your <strong>Order ID</strong> in the box above — it&apos;s on your
+                confirmation page and in your Messenger receipt. Lost it? Call us at {BUSINESS_PHONE_DISPLAY}.
+              </p>
+            ))}
+
             <div className="flex flex-col gap-3">
-              <ClayButton href="/order" className="w-full">Place Another Order</ClayButton>
+              {canReorder && (
+                <ClayButton href="/order" className="w-full">Order the same again</ClayButton>
+              )}
+              <ClayButton href="/order" variant="outline" className="w-full">Place Another Order</ClayButton>
               <ClayButton href="/" variant="outline" className="w-full">Back to Home</ClayButton>
             </div>
           </>

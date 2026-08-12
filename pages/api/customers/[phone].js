@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       supabase.from('orders').select('*').eq('phone_normalized', phone).order('created_at', { ascending: false }),
       supabase.from('customer_notes').select('*').eq('phone_normalized', phone).order('updated_at', { ascending: false }),
       supabase.from('contact_log').select('*').eq('phone_normalized', phone).order('created_at', { ascending: false }).limit(50),
-      supabase.from('container_ledger').select('*').eq('phone_normalized', phone).eq('kind', 'adjustment').order('created_at', { ascending: false }),
+      supabase.from('container_ledger').select('*').eq('phone_normalized', phone).order('created_at', { ascending: false }),
     ]);
     if (ordersRes.error) throw ordersRes.error;
     const orders = ordersRes.data;
@@ -32,9 +32,11 @@ export default async function handler(req, res) {
     const loyalty = computeRewards(orders);
     const segment = computeSegment({ total_orders: orders.length, total_spent: Math.round(totalSpent * 100) / 100, last_order: latest.created_at });
 
-    const autoDerived = orders.reduce((sum, o) => sum + (o.status === 'delivered' && o.need_container ? (Number(o.container_quantity) || 0) : 0), 0);
-    const manualSum = (ledgerRes.data || []).reduce((sum, a) => sum + (Number(a.delta) || 0), 0);
-    const containers_out = autoDerived + manualSum;
+    // The ledger is now the single source: deliveries write 'delivery_out',
+    // pickups write 'pickup_return', manual edits write 'adjustment'. The old
+    // derive-from-delivered-orders sum was dropped so it can't double-count.
+    const ledger = ledgerRes.data || [];
+    const containers_out = ledger.reduce((sum, a) => sum + (Number(a.delta) || 0), 0);
 
     return res.status(200).json({
       customer_name: latest.customer_name,
@@ -48,7 +50,8 @@ export default async function handler(req, res) {
       segment,
       loyalty,
       containers_out,
-      containerAdjustments: ledgerRes.data || [],
+      // `reason` is what the drawer renders; the column is `note`.
+      containerAdjustments: ledger.map((a) => ({ ...a, reason: a.note })),
       orders,
       notes: notesRes.data || [],
       contactLog: contactLogRes.data || [],

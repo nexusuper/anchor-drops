@@ -1,4 +1,5 @@
 import { getSupabase } from '@/lib/supabaseAdmin';
+import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -49,6 +50,14 @@ export default async function handler(req, res) {
       return { date: d, revenue: Math.round(e.revenue * 100) / 100, orders: e.orders };
     });
 
+    const { data: expenseRows, error: expErr } = await supabase
+      .from('expenses').select('amount')
+      .eq('branch_id', DEFAULT_BRANCH_ID)
+      .gte('spent_at', monthStart);
+    if (expErr) throw expErr;
+    const expensesThisMonth = (expenseRows || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const netThisMonth = revenueThisMonth - expensesThisMonth;
+
     const { data: statusRows, error: statusErr } = await supabase.from('orders').select('status');
     if (statusErr) throw statusErr;
     const statusCountMap = {};
@@ -95,6 +104,8 @@ export default async function handler(req, res) {
         ordersThisMonth,
         activeCustomers30d,
         avgOrderValue: Math.round(avgOrderValue * 100) / 100,
+        expensesThisMonth: Math.round(expensesThisMonth * 100) / 100,
+        netThisMonth: Math.round(netThisMonth * 100) / 100,
       },
       revenueSeries,
       statusBreakdown,

@@ -1,6 +1,7 @@
 import { getSupabase } from '@/lib/supabaseAdmin';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { recordContainerMove } from '@/lib/containers';
 import { z } from 'zod';
 
 const PatchSchema = z.object({ status: z.enum(['scheduled', 'picked_up', 'delivered', 'cancelled']) });
@@ -16,10 +17,23 @@ export default async function handler(req, res) {
     const parsed = PatchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid update data' });
 
-    const { data: exists } = await supabase.from('container_pickups').select('id').eq('id', id).single();
+    const { data: exists } = await supabase
+      .from('container_pickups').select('id, status, phone, container_qty, order_id').eq('id', id).single();
     if (!exists) return res.status(404).json({ error: 'Pickup not found' });
 
     await supabase.from('container_pickups').update({ status: parsed.data.status }).eq('id', id);
+
+    // Containers physically came back to us. Guarded on the pre-update status so
+    // re-saving 'picked_up' doesn't credit the customer twice.
+    if (parsed.data.status === 'picked_up' && exists.status !== 'picked_up') {
+      await recordContainerMove(supabase, {
+        phone: exists.phone,
+        orderId: exists.order_id,
+        delta: -(Number(exists.container_qty) || 0),
+        kind: 'pickup_return',
+        note: `pickup ${id}`,
+      });
+    }
     return res.status(200).json({ success: true });
   }
 

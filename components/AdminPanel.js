@@ -8,6 +8,8 @@ import CustomersTab from './admin/CustomersTab';
 import RouteTab from './admin/RouteTab';
 import InventoryTab from './admin/InventoryTab';
 import ScreenshotsTab from './admin/ScreenshotsTab';
+import ExpensesTab from './admin/ExpensesTab';
+import Receipt, { orderToReceipt } from './admin/Receipt';
 import { SEGMENT_DEFS } from '@/lib/segments';
 import { apiFetch } from '@/lib/api-client';
 
@@ -108,6 +110,7 @@ export default function AdminPanel() {
   const [messengerNotifying, setMessengerNotifying] = useState(null);
   const [messengerResult, setMessengerResult] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
+  const [printOrder, setPrintOrder] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [applyRewardModal, setApplyRewardModal] = useState(null);
   const [applyingReward, setApplyingReward] = useState(null);
@@ -363,7 +366,27 @@ export default function AdminPanel() {
   return (
     <>
       <Head><title>Admin — Anchor Drops</title></Head>
-      <div className="min-h-screen bg-clay-bg">
+
+      {/* Delivery receipt — same slip POS prints. Rendered outside the admin
+          shell (which is print-hidden while open) so the browser's own
+          print-to-PDF gets the receipt alone. */}
+      {printOrder && (
+        <div className="fixed inset-0 z-[70] bg-black/40 overflow-y-auto px-4 py-8 print:static print:bg-white print:p-0">
+          <div className="max-w-lg mx-auto">
+            <Receipt receipt={orderToReceipt(printOrder)} />
+            <div className="flex gap-3 mt-4 print:hidden">
+              <button onClick={() => window.print()} className="flex-1 clay-btn-primary clay-pressable rounded-full py-3 font-display font-semibold">
+                <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Print
+              </button>
+              <button onClick={() => setPrintOrder(null)} className="flex-1 clay-btn-white clay-pressable rounded-full py-3 font-display font-semibold text-clay-skydeep">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={'min-h-screen bg-clay-bg' + (printOrder ? ' print:hidden' : '')}>
 
         {/* Global error banner */}
         {adminError && (
@@ -443,6 +466,12 @@ export default function AdminPanel() {
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'pickups' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
               <ClayIcon name="clipboard" className="w-4 h-4 inline mr-1" /> Pickups
+            </button>
+            <button
+              onClick={() => setActiveTab('expenses')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'expenses' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="cash" className="w-4 h-4 inline mr-1" /> Expenses
             </button>
             <button
               onClick={() => setActiveTab('screenshots')}
@@ -722,6 +751,9 @@ export default function AdminPanel() {
                               <a href={`tel:${o.phone}`} title="Call customer" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
                                 <ClayIcon name="phone" className="w-4 h-4" />
                               </a>
+                              <button onClick={() => setPrintOrder(o)} title="Print receipt" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                                <ClayIcon name="download" className="w-4 h-4" />
+                              </button>
                               {NOTIFIABLE_STATUSES.includes(o.status) && (
                                 <>
                                   <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
@@ -775,6 +807,9 @@ export default function AdminPanel() {
                         {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                       </select>
                       {o.sms_pending ? <div className="text-[10px] font-semibold text-amber-600">SMS reminder pending</div> : null}
+                      <button onClick={() => setPrintOrder(o)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-full transition-colors">
+                        <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Receipt
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -825,6 +860,9 @@ export default function AdminPanel() {
           {activeTab === 'pickups' && (
             <ContainerPickupsPanel savedPassword={savedPassword} />
           )}
+
+          {/* ===== EXPENSES TAB ===== */}
+          {activeTab === 'expenses' && <ExpensesTab savedPassword={savedPassword} onError={setAdminError} />}
 
           {/* ===== SCREENSHOTS TAB ===== */}
           {activeTab === 'screenshots' && <ScreenshotsTab savedPassword={savedPassword} onError={setAdminError} />}

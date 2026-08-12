@@ -22,8 +22,13 @@ export default async function handler(req, res) {
       .or(`delivery_date.eq.${today},delivery_date.is.null`);
     if (error) throw error;
 
+    // Orders with no delivery_date matched every day's route forever, silently
+    // padding today's list. They still need dispatching, so surface them as
+    // their own group instead of hiding or repeating them.
+    const unscheduled = (rows || []).filter((o) => !o.delivery_date);
     const byBarangay = {};
     for (const o of rows || []) {
+      if (!o.delivery_date) continue;
       (byBarangay[o.barangay] ||= []).push(o);
     }
     // ponytail: RouteTab.js consumes `{barangays:[{barangay,count,orders}]}`,
@@ -34,6 +39,11 @@ export default async function handler(req, res) {
       return { barangay, count: orders.length, orders };
     });
     barangays.sort((a, b) => a.barangay.localeCompare(b.barangay));
+    // ponytail: appended as one more "barangay" group so the existing RouteTab
+    // shape still works — no admin-side change needed to see them.
+    if (unscheduled.length > 0) {
+      barangays.push({ barangay: 'Unscheduled (no delivery date)', count: unscheduled.length, orders: unscheduled });
+    }
 
     return res.status(200).json({ barangays, total: (rows || []).length });
   } catch (err) {

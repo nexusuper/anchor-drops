@@ -1,5 +1,5 @@
 import Layout from '@/components/Layout';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
@@ -11,6 +11,10 @@ import {
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
   DELIVERY_ONLY_START, DELIVERY_ONLY_END, STORE_HOURS_LABEL,
 } from '@/lib/scheduling';
+import {
+  DRAFT_KEY, readStored, readIdentity, writeIdentity, clearIdentity, writeOrderPhone,
+} from '@/lib/client-storage';
+import { uuidv4 } from '@/lib/uuid';
 
 // Downscales/compresses a photo before storing it as a data URL, so payment
 // screenshots (often multi-MB phone photos) stay small enough for a text column.
@@ -36,32 +40,42 @@ function fileToCompressedDataUrl(file, maxDim = 1024, quality = 0.7) {
   });
 }
 
+const IDENTITY_FIELDS = ['customer_name', 'phone', 'address', 'barangay', 'lat', 'lng'];
+
+const EMPTY_FORM = {
+  customer_name: '',
+  phone: '',
+  address: '',
+  barangay: '',
+  lat: null,
+  lng: null,
+  product_type: 'slim5',
+  quantity: 1,
+  need_container: false,
+  container_quantity: 1,
+  payment_method: 'cod',
+  gcash_number: '',
+  reference_number: '',
+  payment_screenshot: '',
+  notes: '',
+  has_empty_containers: true,
+  pickup_date: '',
+  pickup_time: '',
+  delivery_date: '',
+  delivery_time: '',
+};
+
 export default function Order() {
   const router = useRouter();
   const { product: queryProduct } = router.query;
 
-  const [form, setForm] = useState({
-    customer_name: '',
-    phone: '',
-    address: '',
-    barangay: '',
-    lat: null,
-    lng: null,
-    product_type: 'slim5',
-    quantity: 1,
-    need_container: false,
-    container_quantity: 1,
-    payment_method: 'cod',
-    gcash_number: '',
-    reference_number: '',
-    payment_screenshot: '',
-    notes: '',
-    has_empty_containers: true,
-    pickup_date: '',
-    pickup_time: '',
-    delivery_date: '',
-    delivery_time: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [restoredIdentity, setRestoredIdentity] = useState(false);
+  const hydratedRef = useRef(false);
+  // One idempotency key per form session, minted on the first submit and reused
+  // by every retry. create_order dedupes on p_client_order_id, so a retry after
+  // a network timeout returns the same order instead of creating a second one.
+  const clientOrderIdRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [rewards, setRewards] = useState(null);
@@ -82,6 +96,47 @@ export default function Order() {
   useEffect(() => {
     if (queryProduct) queueMicrotask(() => setForm((f) => ({ ...f, product_type: queryProduct })));
   }, [queryProduct]);
+
+  // Restore on mount (not in a useState initialiser — the page is server-rendered
+  // and reading storage during render would break hydration).
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    const draft = readStored('sessionStorage', DRAFT_KEY);
+    // This IS the reorder path now — "order the same again" just means landing on
+    // a form already filled from the identity this device saved last time.
+    const identity = readIdentity();
+    if (!draft && !identity) return;
+    queueMicrotask(() => {
+      setForm((f) => ({ ...f, ...(identity || {}), ...(draft || {}), payment_screenshot: '' }));
+      if (identity?.customer_name) setRestoredIdentity(true);
+    });
+  }, []);
+
+  // Persist the in-progress draft. payment_screenshot is a multi-hundred-KB data
+  // URL and would blow the sessionStorage quota, so it is deliberately excluded.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try {
+      const { payment_screenshot, ...rest } = form;
+      window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(rest));
+    } catch { /* storage full or unavailable — the draft is a nicety */ }
+  }, [form]);
+
+  function forgetIdentity() {
+    clearIdentity();
+    setRestoredIdentity(false);
+    setForm(EMPTY_FORM);
+  }
+
+  // ponytail: reorder seeds from this device's own saved identity (above), not
+  // from a server lookup. It used to be /order?reorder=<phone> hitting
+  // /api/orders/by-phone?reorder=1, which returned full name + street address +
+  // the exact delivery hour to anyone who typed a phone number — a home address
+  // and a when-are-you-home window for a guessable key. Local seeding costs only
+  // CROSS-device reorder. To restore that, verify ownership first with the OTP
+  // flow that already exists: lib/reward-codes.js, pages/api/rewards/send-code.js
+  // and pages/api/rewards/verify-code.js.
 
   // Look up loyalty rewards when the phone number looks complete.
   useEffect(() => {
@@ -220,11 +275,16 @@ export default function Order() {
     }
     setLoading(true);
     try {
+      // Inside the try on purpose: this used to sit above it, and on a browser
+      // without crypto.randomUUID it threw uncaught — button stuck loading, no
+      // error, order lost. uuidv4() falls back, and the catch is the backstop.
+      if (!clientOrderIdRef.current) clientOrderIdRef.current = uuidv4();
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          client_order_id: clientOrderIdRef.current,
           container_size: selectedProduct.size,
           total_amount: baseTotal,
           reward_requested: rewardCount,
@@ -240,7 +300,14 @@ export default function Order() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to place order');
-      router.push(`/order/confirmation?id=${data.id}`);
+      writeIdentity(Object.fromEntries(IDENTITY_FIELDS.map((k) => [k, form[k]])));
+      try { window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* nicety */ }
+      // The phone rides in sessionStorage, never the query string — see the note
+      // in lib/client-storage.js. The order id stays in the URL so the
+      // confirmation page remains shareable and bookmarkable.
+      writeOrderPhone(form.phone);
+      const screenshotFlag = form.payment_screenshot && data.screenshot_saved === false ? '&screenshot=0' : '';
+      router.push(`/order/confirmation?id=${encodeURIComponent(data.id)}${screenshotFlag}`);
     } catch (err) {
       setError(err.message);
       setLoading(false);
@@ -265,7 +332,14 @@ export default function Order() {
 
           {/* Customer Info */}
           <ClayCard className="p-6">
-            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Your Information</h2>
+            <div className="flex items-baseline justify-between mb-4">
+              <h2 className="text-lg font-editorial font-semibold text-clay-ink2">Your Information</h2>
+              {restoredIdentity && (
+                <button type="button" onClick={forgetIdentity} className="text-xs font-semibold text-clay-skydeep hover:underline">
+                  Not you? Clear
+                </button>
+              )}
+            </div>
             <div className="space-y-4">
               <div>
                 <label htmlFor="customer_name" className="block text-sm font-medium text-clay-ink2 mb-1">Full Name *</label>

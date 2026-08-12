@@ -63,12 +63,40 @@ export default function Rewards() {
           {error && <p className="text-red-500 text-sm mt-2" role="alert">{error}</p>}
         </form>
 
-        {data && (
+        {data && data.deliveredGallons === 0 && (
+          <>
+            <ClayCard className="p-6 text-center">
+              <ClayIcon name="drop" className="w-10 h-10 mx-auto mb-3 text-clay-sky" />
+              <p className="font-editorial text-xl font-bold text-clay-ink mb-1">No gallons counted yet</p>
+              <p className="text-sm text-clay-muted font-semibold">
+                Place your first order and you&apos;ll earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} gallons.
+              </p>
+            </ClayCard>
+            {data.containers_out != null && data.containers_out > 0 && (
+              <ClayCard variant="inset" className="p-4 text-center text-sm font-semibold text-clay-ink2">
+                You currently have <strong>{data.containers_out}</strong> of our container{data.containers_out === 1 ? '' : 's'} at home.
+              </ClayCard>
+            )}
+            <p className="text-center text-xs text-clay-muted">
+              Gallons count once an order is marked <strong>delivered</strong> — orders still pending or on the way aren&apos;t counted yet.
+            </p>
+            <ClayButton href="/order" className="w-full">Place Your First Order</ClayButton>
+          </>
+        )}
+
+        {data && data.deliveredGallons > 0 && (
           <>
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted font-semibold mb-1">Free refills available</p>
               <p className="font-editorial text-6xl font-bold text-clay-skydeep mb-1">{data.available}</p>
               <p className="text-sm text-clay-muted">{data.deliveredGallons} gallons delivered all-time</p>
+              {data.containers_out != null && (
+                <p className="text-sm text-clay-muted mt-1">
+                  {data.containers_out > 0
+                    ? `${data.containers_out} of our container${data.containers_out === 1 ? '' : 's'} currently at your home`
+                    : 'No containers of ours at your home'}
+                </p>
+              )}
             </ClayCard>
 
             <ClayCard className="p-6">
@@ -85,6 +113,10 @@ export default function Rewards() {
               <ClayIcon name="info" className="w-4 h-4 inline mr-1" />
               To use a free refill (₱{VOUCHER_VALUE} each), just tell us when you order. We&apos;ll send a code to your Messenger to confirm it&apos;s you — or we can simply apply it when we deliver.
             </ClayCard>
+
+            <p className="text-center text-xs text-clay-muted">
+              Gallons count once an order is marked <strong>delivered</strong> — orders still pending or on the way aren&apos;t counted yet.
+            </p>
 
             <ClayButton href="/order" className="w-full">Order &amp; Redeem</ClayButton>
           </>
