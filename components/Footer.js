@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import ClayIcon from './ui/ClayIcon';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
+import { STORE_HOURS_LABEL } from '@/lib/scheduling';
 
 const QUICK_LINKS = [
   { href: '/', label: 'Home' },
@@ -59,7 +60,7 @@ export default function Footer() {
                 <ClayIcon name="chat" className="w-4 h-4 text-clay-sky shrink-0" /> anchordrops@email.com
               </li>
               <li className="flex items-center gap-2.5 text-sm font-semibold text-clay-muted">
-                <ClayIcon name="info" className="w-4 h-4 text-clay-sky shrink-0" /> Mon–Sat, 7AM–6PM
+                <ClayIcon name="info" className="w-4 h-4 text-clay-sky shrink-0" /> {STORE_HOURS_LABEL}
               </li>
             </ul>
           </div>

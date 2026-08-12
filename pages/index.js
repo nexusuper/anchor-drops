@@ -12,12 +12,12 @@ const features = [
   {
     icon: 'bolt',
     title: 'Order in Under 2 Minutes',
-    desc: 'No login, no app to download. Fill a quick form and we handle the rest — same-day if you order before 11AM.',
+    desc: 'No login, no app to download. Fill a quick form, pick your pickup and delivery window, and we handle the rest.',
   },
   {
     icon: 'lock',
-    title: 'Live Order Tracking',
-    desc: 'Know exactly where your delivery is. Track any order anytime by phone number — no account required.',
+    title: 'Check Your Order Anytime',
+    desc: 'Follow your order from received to delivered. Look it up by Order ID or phone number — no account required.',
   },
   {
     icon: 'filter',
@@ -81,7 +81,7 @@ export default function Home() {
               Convenience,<br />built in.
             </h2>
             <p className="text-clay-muted font-semibold text-base leading-relaxed max-w-[42ch]">
-              Set it and forget it — schedule recurring orders, track every delivery live, and let free refill vouchers stack up on their own.
+              Pick your own pickup and delivery window, check your order status anytime, and let free refill vouchers stack up on their own.
             </p>
             <ul className="mt-6 space-y-2.5 text-base font-bold text-clay-skydeep">
               <li>💧 Safe &amp; Purified</li>
@@ -156,7 +156,7 @@ export default function Home() {
             Water on your schedule, not the other way around.
           </h2>
           <p className="text-clay-muted font-semibold text-base max-w-md">
-            No account, no hassle. Order, track it live, and earn a free refill voucher every time.
+            No account, no hassle. Order, check its status anytime, and earn a free refill voucher every time.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <ClayButton href="/order" size="lg">Place Your Order</ClayButton>

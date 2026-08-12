@@ -4,6 +4,7 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { PRODUCTS, DELIVERY_RULES } from '@/lib/products';
+import { STORE_HOURS_LABEL } from '@/lib/scheduling';
 
 const payments = [
   { icon: 'cash', name: 'Cash on Delivery', desc: 'Pay when your water arrives.' },
@@ -66,7 +67,7 @@ export default function Products() {
             </tbody>
           </table>
         </ClayCard>
-        <p className="text-clay-muted text-xs text-center mt-3">Delivery available Mon–Sat, 7AM–6PM within service area.</p>
+        <p className="text-clay-muted text-xs text-center mt-3">Delivery available {STORE_HOURS_LABEL}, within service area.</p>
       </section>
 
       <section className="max-w-4xl mx-auto px-4 py-12">
