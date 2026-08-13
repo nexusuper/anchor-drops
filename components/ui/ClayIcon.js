@@ -32,6 +32,15 @@ const PATHS = {
   send: <><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
   'x-circle': <><circle cx="12" cy="12" r="9" /><path d="M15 9l-6 6M9 9l6 6" /></>,
+  chart: <><path d="M4 20V4" /><path d="M4 20h16" /><path d="M8 20v-6M13 20V9M18 20v-9" /></>,
+  alert: <><path d="M12 3l9 16H3z" /><path d="M12 9v5M12 17h.01" /></>,
+  box: <><path d="M3 8l9-5 9 5v8l-9 5-9-5z" /><path d="M3 8l9 5 9-5M12 13v8" /></>,
+  peso: <><path d="M7 20V4h5a4 4 0 0 1 0 8H7" /><path d="M5 8h11M5 11h11" /></>,
+  doc: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>,
+  gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></>,
+  camera: <><path d="M4 8h3l2-2h6l2 2h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></>,
+  pen: <><path d="M4 20h4L20 8l-4-4L4 16z" /><path d="M14 6l4 4" /></>,
 };
 
 export default function ClayIcon({ name, title, className = 'w-6 h-6', fill = 'none', stroke = 'currentColor', strokeWidth = 2 }) {
