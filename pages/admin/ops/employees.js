@@ -4,7 +4,7 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { useOpsSession } from '@/lib/useOpsSession';
-import { fetchEmployees, fetchActivityLog, createEmployee, deactivateEmployee } from '@/components/admin/ops/StaffApi';
+import { fetchEmployees, fetchActivityLog, createEmployee, deactivateEmployee, reactivateEmployee } from '@/components/admin/ops/StaffApi';
 
 const CREATABLE_ROLES = ['staff', 'driver', 'admin'];
 const ROLE_FILTERS = ['all', 'staff', 'driver'];
@@ -22,7 +22,7 @@ export default function EmployeesPage() {
 }
 
 function EmployeesContent() {
-  const { role, branchId } = useOpsSession();
+  const { role, branchId, session } = useOpsSession();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,15 +59,23 @@ function EmployeesContent() {
     queueMicrotask(() => load());
   }, [showActivity]);
 
+  // Both actions go through the manage-employee Edge Function: the is_active
+  // flag revokes authorization (migration 0031) and the function additionally
+  // bans/unbans the auth user, which needs the Admin API.
   async function handleDeactivate(p) {
-    // Deliberately does NOT claim sign-in is blocked: deactivation is only a
-    // `profiles.is_active` flag, and nothing on the auth path reads it —
-    // app_role() in the shared DB (anchor-drops-system migration 0002_rls.sql)
-    // has no is_active term, so RLS still grants this account its role. Closing
-    // that needs a DB change plus an Admin-API ban, tracked in that repo.
-    if (!confirm(`Deactivate ${p.full_name || p.id}? They will be marked inactive, but their sign-in still works until the owner resets it.`)) return;
+    if (!confirm(`Deactivate ${p.full_name || p.id}? They lose all access and can no longer sign in.`)) return;
     try {
       await deactivateEmployee(p.id);
+      await loadEmployees();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  async function handleReactivate(p) {
+    if (!confirm(`Reactivate ${p.full_name || p.id}? Their access and sign-in are restored.`)) return;
+    try {
+      await reactivateEmployee(p.id);
       await loadEmployees();
     } catch (e) {
       alert(e.message);
@@ -114,10 +122,16 @@ function EmployeesContent() {
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
               {p.is_active ? 'Active' : 'Inactive'}
             </span>
-            {p.is_active && p.role !== 'owner' && (
-              <button onClick={() => handleDeactivate(p)} className="text-xs font-semibold text-clay-danger px-2 py-1">
-                Deactivate
-              </button>
+            {p.role !== 'owner' && p.id !== session?.user?.id && (
+              p.is_active ? (
+                <button onClick={() => handleDeactivate(p)} className="text-xs font-semibold text-clay-danger px-2 py-1">
+                  Deactivate
+                </button>
+              ) : (
+                <button onClick={() => handleReactivate(p)} className="text-xs font-semibold text-clay-ink2 px-2 py-1">
+                  Reactivate
+                </button>
+              )
             )}
           </ClayCard>
         ))}

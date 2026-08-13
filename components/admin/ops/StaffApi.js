@@ -27,9 +27,9 @@ export async function fetchActivityLog() {
 // browser never holds — routed through the deployed manage-employee Edge
 // Function, which re-checks the caller's role server-side. invoke() forwards
 // the caller's session as the Authorization bearer automatically.
-export async function createEmployee(input) {
+async function invokeManageEmployee(body) {
   const supabase = getSupabaseBrowser();
-  const { data, error } = await supabase.functions.invoke('manage-employee', { body: input });
+  const { data, error } = await supabase.functions.invoke('manage-employee', { body });
   if (error) throw error;
   if (data && typeof data === 'object' && 'error' in data && data.error) {
     throw new Error(String(data.error));
@@ -37,16 +37,18 @@ export async function createEmployee(input) {
   return data;
 }
 
-// Plain RLS-covered update — profiles_upd already lets owner/admin flip
-// is_active on a non-owner row in their branch. No Edge Function needed.
+export async function createEmployee(input) {
+  return invokeManageEmployee({ ...input, action: 'create' });
+}
+
+// Not a plain `profiles` update: flipping is_active revokes authorization (0031
+// makes app_role() ignore inactive rows) but leaves the login working. The Edge
+// Function also bans the auth user, which needs the Admin API / service_role
+// key the browser never holds.
 export async function deactivateEmployee(id) {
-  const supabase = getSupabaseBrowser();
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ is_active: false })
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+  return invokeManageEmployee({ action: 'deactivate', id });
+}
+
+export async function reactivateEmployee(id) {
+  return invokeManageEmployee({ action: 'reactivate', id });
 }
