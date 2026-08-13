@@ -73,11 +73,11 @@ function ProfileContent() {
     }
   }
 
-  // Own-name edit: `profiles` has no self-UPDATE RLS policy for staff/driver
-  // (0021_profile_avatars.sql) — only owner/admin can update their own row via
-  // `profiles_upd`. An RLS-blocked UPDATE is NOT an error, it matches zero
-  // rows silently, so `.select('id')` is required: an empty result means denied,
-  // and reporting "saved" there would be a lie.
+  // Own-name edit goes through the `set_my_name` RPC (migration 0031), not a
+  // direct UPDATE: staff/driver have no self-UPDATE policy on `profiles`, since
+  // a blanket one would open role/branch tampering on that table. The RPC is
+  // SECURITY DEFINER and can only ever write full_name on the caller's own row.
+  // Same rationale as `set_my_avatar` (0021).
   async function handleSaveName() {
     if (!session?.user) return;
     setNameError(null); setNameSaved(false);
@@ -85,15 +85,8 @@ function ProfileContent() {
     setNameSaving(true);
     try {
       const supabase = getSupabaseBrowser();
-      const { data, error } = await supabase
-        .from('profiles')
-        .update({ full_name: fullName.trim() })
-        .eq('id', session.user.id)
-        .select('id');
+      const { error } = await supabase.rpc('set_my_name', { p_full_name: fullName.trim() });
       if (error) throw error;
-      if (!data || data.length === 0) {
-        throw new Error('Your role cannot change its own name. Ask the owner or an admin to rename you.');
-      }
       setNameSaved(true);
     } catch (err) {
       setNameError(err.message);
