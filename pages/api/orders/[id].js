@@ -146,15 +146,7 @@ export default async function handler(req, res) {
           });
         } catch (notifyErr) {
           console.error('Auto Messenger notify failed:', notifyErr);
-          // A PSID that exists but whose send fails (FB's 24h window closes
-          // routinely) has to raise the same "tell them manually" flag as no
-          // PSID at all, or the failure is invisible to the owner.
-          await supabase.from('orders').update({ sms_pending: true }).eq('id', id);
         }
-      } else if (NOTIFIABLE_STATUSES.includes(status)) {
-        // Notifiable status change but no linked Messenger PSID — flag for staff
-        // to send the SMS reminder manually (AdminPanel shows the pending badge).
-        await supabase.from('orders').update({ sms_pending: true }).eq('id', id);
       }
 
       // A delivered order cancelled afterwards (admin PATCH allows any

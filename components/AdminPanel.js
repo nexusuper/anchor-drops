@@ -742,9 +742,6 @@ export default function AdminPanel() {
                             >
                               {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                             </select>
-                            {o.sms_pending ? (
-                              <div className="text-[10px] font-semibold text-amber-600 mt-1">SMS reminder pending</div>
-                            ) : null}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
@@ -806,7 +803,6 @@ export default function AdminPanel() {
                       >
                         {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                       </select>
-                      {o.sms_pending ? <div className="text-[10px] font-semibold text-amber-600">SMS reminder pending</div> : null}
                       <button onClick={() => setPrintOrder(o)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-full transition-colors">
                         <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Receipt
                       </button>

@@ -31,8 +31,5 @@ export default async function handler(req, res) {
     channel: 'sms', direction: 'outbound', summary: message, order_id: order.id,
   });
 
-  // SMS was built and sent to staff — clear the pending reminder badge.
-  await supabase.from('orders').update({ sms_pending: false }).eq('id', order.id);
-
   return res.status(200).json({ phone: order.phone, message });
 }
