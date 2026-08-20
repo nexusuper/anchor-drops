@@ -265,7 +265,7 @@ export default function Order() {
       setError('Please enter a valid PH mobile number (09XX-XXX-XXXX).');
       return;
     }
-    if (form.payment_method === 'gcash' && !isPhMobile(form.gcash_number)) {
+    if (form.payment_method === 'gcash' && form.gcash_number.trim() && !isPhMobile(form.gcash_number)) {
       setError('Please enter a valid GCash mobile number (09XX-XXX-XXXX).');
       return;
     }
@@ -510,8 +510,7 @@ export default function Order() {
             <div className="space-y-2">
               {[
                 { id: 'cod', label: 'Cash on Delivery' },
-                { id: 'gcash', label: 'GCash' },
-                { id: 'bank_transfer', label: 'Bank Transfer' },
+                { id: 'gcash', label: 'GCash / Bank Transfer' },
               ].map((m) => (
                 <label key={m.id} className={`flex items-center gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.payment_method === m.id ? 'clay-tile-selected' : ''}`}>
                   <input type="radio" name="payment_method" value={m.id} checked={form.payment_method === m.id} onChange={() => set('payment_method', m.id)} className="accent-clay-sky" />
@@ -522,28 +521,17 @@ export default function Order() {
 
             {(form.payment_method === 'gcash' || form.payment_method === 'bank_transfer') && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
-                {form.payment_method === 'gcash' ? (
-                  <>
-                    <p className="text-sm text-clay-ink2">Send payment to GCash: <strong>{BUSINESS_PHONE_DISPLAY}</strong> (Anchor Drops)</p>
-                    <div className="flex flex-col items-center gap-2 py-2">
-                      <img src="/payment/gcash-qr.jpeg" alt="Anchor Drops GCash QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
-                      <p className="text-xs text-clay-muted font-semibold">Scan with your GCash app to pay directly</p>
-                    </div>
-                    <div>
-                      <label htmlFor="gcash_number" className="block text-sm font-medium text-clay-ink2 mb-1">Your GCash Number *</label>
-                      <input id="gcash_number" required type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
-                      {gcashInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-clay-ink2">Send payment to: <strong>BDO 0012-3456-7890</strong> (Anchor Drops Water Refill)</p>
-                    <div className="flex flex-col items-center gap-2 py-2">
-                      <img src="/payment/gcash-qr.jpeg" alt="Anchor Drops InstaPay QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
-                      <p className="text-xs text-clay-muted font-semibold">Or scan with your banking app&apos;s InstaPay/QR Ph transfer</p>
-                    </div>
-                  </>
-                )}
+                <p className="text-sm text-clay-ink2">GCash: <strong>{BUSINESS_PHONE_DISPLAY}</strong> (Anchor Drops)</p>
+                <p className="text-sm text-clay-ink2">Bank transfer: <strong>BDO 0012-3456-7890</strong> (Anchor Drops Water Refill)</p>
+                <div className="flex flex-col items-center gap-2 py-2">
+                  <img src="/payment/gcash-qr.jpeg" alt="Anchor Drops GCash / InstaPay QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
+                  <p className="text-xs text-clay-muted font-semibold">Scan with GCash, or your bank app via InstaPay/QR Ph</p>
+                </div>
+                <div>
+                  <label htmlFor="gcash_number" className="block text-sm font-medium text-clay-ink2 mb-1">Your GCash Number (if paying via GCash)</label>
+                  <input id="gcash_number" type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                  {gcashInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
+                </div>
                 <div>
                   <label htmlFor="reference_number" className="block text-sm font-medium text-clay-ink2 mb-1">Reference Number (after payment)</label>
                   <input id="reference_number" value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} className="clay-input" placeholder="Optional, fill after sending" />

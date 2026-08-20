@@ -51,7 +51,7 @@ export default function Home() {
       {/* Trust badges */}
       <section className="max-w-6xl mx-auto px-4 pb-8">
         <div className="reveal flex flex-wrap justify-center gap-x-6 gap-y-2">
-          {['FDA Registered', 'Safe Drinking Water', 'Same Day Delivery', 'Cash on Delivery'].map((t) => (
+          {['DTI Registered', 'Bacteriological / Water Quality Tested', 'Sanitary Permit & Compliance', 'Same Day Delivery', 'Cash on Delivery'].map((t) => (
             <span key={t} className="inline-flex items-center gap-1.5 text-sm font-bold text-clay-ink2">
               <ClayIcon name="check" className="w-4 h-4 text-clay-skydeep" /> {t}
             </span>
@@ -87,7 +87,7 @@ export default function Home() {
               <li>💧 Safe &amp; Purified</li>
               <li>🚚 Fast Delivery</li>
               <li>💙 Friendly Service</li>
-              <li>💳 Cash · GCash · Bank Transfer</li>
+              <li>💳 Cash · GCash/Bank Transfer</li>
             </ul>
             <div className="mt-8">
               <ClayButton href="/order">Order Today</ClayButton>

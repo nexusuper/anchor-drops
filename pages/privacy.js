@@ -37,8 +37,8 @@ export default function Privacy() {
           <ul className="list-disc pl-5 space-y-1">
             <li><strong>Order details</strong> — your name, phone number, delivery address, an optional map
               pin (GPS location) you choose to share, and the products and quantities you order.</li>
-            <li><strong>Payment information</strong> — your chosen payment method (Cash on Delivery, GCash, or
-              bank transfer). For GCash or bank transfers you may optionally upload a payment screenshot and
+            <li><strong>Payment information</strong> — your chosen payment method (Cash on Delivery, or
+              GCash/Bank Transfer). For GCash/Bank Transfer payments you may optionally upload a payment screenshot and
               reference number. We do <strong>not</strong> collect card numbers, bank logins, or GCash passwords.</li>
             <li><strong>Facebook Messenger</strong> — if you tap &ldquo;link Messenger&rdquo; or message our
               Facebook Page, we receive your Messenger ID so we can send order updates and free-refill reward
