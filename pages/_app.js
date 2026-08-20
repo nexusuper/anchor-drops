@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import MessengerButton from '@/components/MessengerButton';
 import { canonicalFor } from '@/lib/seo';
+import { reportError } from '@/lib/reportError';
 import { Fredoka, Nunito, Space_Grotesk } from 'next/font/google';
 
 const fredoka = Fredoka({
@@ -52,6 +53,17 @@ export const trackLead = () => {
 
 export default function App({ Component, pageProps }) {
   const router = useRouter();
+
+  useEffect(() => {
+    const onError = (e) => reportError(e.error || e.message, { type: 'window.onerror' });
+    const onRejection = (e) => reportError(e.reason, { type: 'unhandledrejection' });
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, []);
 
   useEffect(() => {
     const handleRouteChange = () => pageview();
