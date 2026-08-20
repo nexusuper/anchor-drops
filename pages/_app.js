@@ -1,8 +1,10 @@
 import "@/styles/globals.css";
+import Head from 'next/head';
 import Script from 'next/script';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import MessengerButton from '@/components/MessengerButton';
+import { canonicalFor } from '@/lib/seo';
 import { Fredoka, Nunito, Space_Grotesk } from 'next/font/google';
 
 const fredoka = Fredoka({
@@ -76,6 +78,11 @@ export default function App({ Component, pageProps }) {
 
   return (
     <div className={`${fredoka.variable} ${nunito.variable} ${spaceGrotesk.variable}`}>
+      <Head>
+        {/* Query string stripped: ?ref=, ?fbclid= etc. must not generate distinct canonicals. */}
+        <link rel="canonical" href={canonicalFor(router.asPath.split('?')[0])} />
+      </Head>
+
       {/* Meta Pixel */}
       {FB_PIXEL_ID && (
         <Script
