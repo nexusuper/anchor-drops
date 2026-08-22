@@ -76,6 +76,17 @@ export default async function handler(req, res) {
       for (const event of entry.messaging || []) {
         const senderPsid = event.sender?.id;
 
+        // Stamps every inbound event, independent of whether this PSID is
+        // bound to a customer/order yet — Meta's 24h messaging window is a
+        // property of the PSID conversation itself. Read by
+        // lib/facebook.js's sendMessengerMessage() to decide whether an
+        // outbound send can go untagged (see migration 0035).
+        if (senderPsid) {
+          await getSupabase()
+            .from('messenger_conversations')
+            .upsert({ psid: senderPsid, last_inbound_at: new Date().toISOString() });
+        }
+
         if (event.message?.text) {
           await handleMessage(senderPsid, event.message.text);
         }
