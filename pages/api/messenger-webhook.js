@@ -75,6 +75,7 @@ export default async function handler(req, res) {
     for (const entry of body.entry || []) {
       for (const event of entry.messaging || []) {
         const senderPsid = event.sender?.id;
+        console.log('[messenger-debug] event keys:', Object.keys(event), 'senderPsid:', senderPsid);
 
         // Stamps every inbound event, independent of whether this PSID is
         // bound to a customer/order yet — Meta's 24h messaging window is a
@@ -82,10 +83,15 @@ export default async function handler(req, res) {
         // lib/facebook.js's sendMessengerMessage() to decide whether an
         // outbound send can go untagged (see migration 0035).
         if (senderPsid) {
-          const { error: convoError } = await getSupabase()
-            .from('messenger_conversations')
-            .upsert({ psid: senderPsid, last_inbound_at: new Date().toISOString() });
-          if (convoError) console.error('messenger_conversations upsert failed:', convoError);
+          try {
+            const { data: convoData, error: convoError } = await getSupabase()
+              .from('messenger_conversations')
+              .upsert({ psid: senderPsid, last_inbound_at: new Date().toISOString() })
+              .select();
+            console.log('[messenger-debug] upsert result:', JSON.stringify({ convoData, convoError }));
+          } catch (convoThrown) {
+            console.error('[messenger-debug] upsert threw:', convoThrown);
+          }
         }
 
         if (event.message?.text) {
