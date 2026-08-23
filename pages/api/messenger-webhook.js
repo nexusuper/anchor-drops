@@ -40,7 +40,8 @@ export default async function handler(req, res) {
     const challenge = req.query['hub.challenge'];
 
     if (mode === 'subscribe' && VERIFY_TOKEN && timingSafeEqual(token, VERIFY_TOKEN)) {
-      return res.status(200).type('text/plain').send(String(challenge).replace(/[^0-9]/g, ''));
+      res.setHeader('Content-Type', 'text/plain');
+      return res.status(200).send(String(challenge).replace(/[^0-9]/g, ''));
     }
     return res.status(403).json({ error: 'Verification failed' });
   }
