@@ -82,9 +82,10 @@ export default async function handler(req, res) {
         // lib/facebook.js's sendMessengerMessage() to decide whether an
         // outbound send can go untagged (see migration 0035).
         if (senderPsid) {
-          await getSupabase()
+          const { error: convoError } = await getSupabase()
             .from('messenger_conversations')
             .upsert({ psid: senderPsid, last_inbound_at: new Date().toISOString() });
+          if (convoError) console.error('messenger_conversations upsert failed:', convoError);
         }
 
         if (event.message?.text) {
