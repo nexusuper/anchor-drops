@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   if (!token) return res.status(500).json({ error: 'FB_PAGE_ACCESS_TOKEN not configured' });
 
   if (req.method === 'GET') {
-    const r = await fetch(`${FB_GRAPH_URL}/me/messenger_profile?fields=persistent_menu,get_started&access_token=${token}`);
+    const r = await fetch(`${FB_GRAPH_URL}/me/messenger_profile?fields=persistent_menu,get_started,ice_breakers,greeting&access_token=${token}`);
     const data = await r.json();
     return res.status(r.ok ? 200 : 500).json(data);
   }
