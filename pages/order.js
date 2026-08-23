@@ -5,7 +5,7 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import LocationPicker from '@/components/order/LocationPicker';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
-import { PRODUCTS, deliveryFee, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
+import { PRODUCTS, deliveryFee, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY } from '@/lib/products';
 import {
   classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday,
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
@@ -521,8 +521,7 @@ export default function Order() {
 
             {(form.payment_method === 'gcash' || form.payment_method === 'bank_transfer') && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
-                <p className="text-sm text-clay-ink2">GCash: <strong>{BUSINESS_PHONE_DISPLAY}</strong> (Anchor Drops)</p>
-                <p className="text-sm text-clay-ink2">Bank transfer: <strong>BDO 0012-3456-7890</strong> (Anchor Drops Water Refill)</p>
+                <p className="text-sm text-clay-ink2">GCash: <strong>{GCASH_NUMBER_DISPLAY}</strong> (Anchor Drops)</p>
                 <div className="flex flex-col items-center gap-2 py-2">
                   <img src="/payment/gcash-qr.jpeg" alt="Anchor Drops GCash / InstaPay QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
                   <p className="text-xs text-clay-muted font-semibold">Scan with GCash, or your bank app via InstaPay/QR Ph</p>
