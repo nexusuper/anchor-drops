@@ -459,7 +459,7 @@ export default function AdminPanel() {
               onClick={() => setActiveTab('pos')}
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'pos' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
-              <ClayIcon name="cash" className="w-4 h-4 inline mr-1" /> POS
+              <ClayIcon name="cash" className="w-4 h-4 inline mr-1" /> Walk Ins
             </button>
             <button
               onClick={() => setActiveTab('pickups')}

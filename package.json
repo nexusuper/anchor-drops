@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:smoke": "playwright test",
     "remotion": "remotion studio remotion/index.ts",
     "render:video": "remotion render remotion/index.ts WaterRefillProcess public/purify-process.mp4 --codec=h264",
     "render:poster": "remotion still remotion/index.ts Poster public/purify-process-poster.jpg --image-format=jpeg"
@@ -20,6 +21,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@remotion/cli": "^4.0.484",
     "@remotion/google-fonts": "^4.0.484",
     "@tailwindcss/postcss": "^4",
