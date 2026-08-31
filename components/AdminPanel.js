@@ -5,6 +5,7 @@ import POSPanel from './admin/POSPanel';
 import ContainerPickupsPanel from './admin/ContainerPickupsPanel';
 import DashboardTab from './admin/DashboardTab';
 import CustomersTab from './admin/CustomersTab';
+import LoyaltyTab from './admin/LoyaltyTab';
 import RouteTab from './admin/RouteTab';
 import InventoryTab from './admin/InventoryTab';
 import ScreenshotsTab from './admin/ScreenshotsTab';
@@ -12,6 +13,8 @@ import ExpensesTab from './admin/ExpensesTab';
 import Receipt, { orderToReceipt } from './admin/Receipt';
 import { SEGMENT_DEFS } from '@/lib/segments';
 import { apiFetch } from '@/lib/api-client';
+import { ORDER_STATUS_BADGE } from '@/lib/order-status';
+import { VOUCHER_VALUE } from '@/lib/loyalty';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
 const DELETABLE_STATUSES = ['delivered', 'cancelled'];
@@ -24,13 +27,7 @@ const STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
-const STATUS_COLORS = {
-  pending: 'bg-yellow-100 text-yellow-700',
-  confirmed: 'bg-blue-100 text-blue-700',
-  out_for_delivery: 'bg-orange-100 text-orange-700',
-  delivered: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-};
+const STATUS_COLORS = ORDER_STATUS_BADGE;
 
 
 const SORT_OPTIONS = [
@@ -404,7 +401,7 @@ export default function AdminPanel() {
             <div>
               <h1 className="text-xl font-bold">Anchor Drops — Admin</h1>
               <p className="text-sky-200 text-sm">
-                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? "Today's deliveries" : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? 'Payment screenshots' : 'Business overview'}
+                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? "Today's deliveries" : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? 'Payment screenshots' : activeTab === 'loyalty' ? 'Order-count voucher tracker' : 'Business overview'}
               </p>
             </div>
             <div className="flex gap-3">
@@ -421,7 +418,7 @@ export default function AdminPanel() {
               </button>
             </div>
           </div>
-          <div className="flex gap-1 px-6 pb-0 flex-wrap">
+          <div className="flex gap-1 px-6 pb-0 overflow-x-auto whitespace-nowrap">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'dashboard' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
@@ -439,6 +436,12 @@ export default function AdminPanel() {
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'customers' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
               <ClayIcon name="users" className="w-4 h-4 inline mr-1" /> Customers
+            </button>
+            <button
+              onClick={() => setActiveTab('loyalty')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'loyalty' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="star" className="w-4 h-4 inline mr-1" /> Loyalty Voucher
             </button>
             <button
               onClick={() => setActiveTab('route')}
@@ -491,7 +494,7 @@ export default function AdminPanel() {
           {activeTab === 'orders' && (<>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-6">
             {STATUS_OPTIONS.map((s) => (
               <button
                 key={s.value}
@@ -614,10 +617,10 @@ export default function AdminPanel() {
 
           {applyRewardModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-              <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full">
+              <div className="clay-raised rounded-3xl p-6 max-w-sm w-full">
                 <h2 className="text-lg font-bold text-gray-800 text-center mb-1">Apply free refill reward?</h2>
                 <p className="text-sm text-gray-500 text-center mb-1">Order <span className="font-mono font-bold text-sky-600">{applyRewardModal.id}</span></p>
-                <p className="text-sm text-gray-500 text-center mb-4">{applyRewardModal.customer_name} requested {applyRewardModal.reward_requested} free refill(s) (−₱{applyRewardModal.reward_requested * 30}).</p>
+                <p className="text-sm text-gray-500 text-center mb-4">{applyRewardModal.customer_name} requested {applyRewardModal.reward_requested} free refill(s) (−₱{applyRewardModal.reward_requested * VOUCHER_VALUE}).</p>
                 <p className="text-xs text-gray-400 text-center mb-5">Only apply after confirming this is the real customer.</p>
                 <div className="flex gap-2">
                   <button onClick={() => setApplyRewardModal(null)} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors">Cancel</button>
@@ -672,7 +675,7 @@ export default function AdminPanel() {
                         <tr key={o.id} className={(selected.includes(o.id) ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')}>
                           <td className="px-4 py-3">
                             {DELETABLE_STATUSES.includes(o.status) && (
-                              <input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleOne(o.id)} className="w-4 h-4 accent-red-500 cursor-pointer" />
+                              <input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleOne(o.id)} aria-label={'Select order ' + o.id} className="w-4 h-4 accent-red-500 cursor-pointer" />
                             )}
                           </td>
                           <td className="px-4 py-3 font-mono font-bold text-sky-600">{o.id}</td>
@@ -708,6 +711,7 @@ export default function AdminPanel() {
                                   type="checkbox"
                                   checked={!!o.payment_verified}
                                   onChange={(e) => togglePaymentVerified(o.id, e.target.checked)}
+                                  aria-label="Payment verified"
                                   className="w-3.5 h-3.5 accent-green-500"
                                 />
                                 <span className={'text-[10px] font-semibold ' + (o.payment_verified ? 'text-green-600' : 'text-amber-600')}>
@@ -745,26 +749,26 @@ export default function AdminPanel() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
-                              <a href={`tel:${o.phone}`} title="Call customer" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                              <a href={`tel:${o.phone}`} title="Call customer" aria-label="Call customer" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
                                 <ClayIcon name="phone" className="w-4 h-4" />
                               </a>
-                              <button onClick={() => setPrintOrder(o)} title="Print receipt" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                              <button onClick={() => setPrintOrder(o)} title="Print receipt" aria-label="Print receipt" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
                                 <ClayIcon name="download" className="w-4 h-4" />
                               </button>
                               {NOTIFIABLE_STATUSES.includes(o.status) && (
                                 <>
-                                  <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                                  <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" aria-label="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
                                     {notifying === o.id ? '...' : <ClayIcon name="mobile" className="w-4 h-4" />}
                                   </button>
                                   {o.messenger_psid && (
-                                    <button onClick={() => notifyViaMessenger(o.id, o.status)} disabled={messengerNotifying === o.id} title="Send via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                                    <button onClick={() => notifyViaMessenger(o.id, o.status)} disabled={messengerNotifying === o.id} title="Send via Messenger" aria-label="Send via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
                                       {messengerNotifying === o.id ? '...' : <ClayIcon name="chat" className="w-4 h-4" />}
                                     </button>
                                   )}
                                 </>
                               )}
                               {DELETABLE_STATUSES.includes(o.status) && (
-                                <button onClick={() => setDeleteModal(o)} title="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
+                                <button onClick={() => setDeleteModal(o)} title="Delete order" aria-label="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
                                   <ClayIcon name="trash" className="w-4 h-4" />
                                 </button>
                               )}
@@ -794,18 +798,54 @@ export default function AdminPanel() {
                         )}
                       </div>
                       <div className="text-xs text-gray-400">{o.phone} · {o.barangay}</div>
+                      <div className="text-xs text-gray-400 truncate">{o.address}</div>
                       <div className="text-sm text-gray-600">{o.product_type} x{o.quantity}</div>
+                      <div className="text-xs text-gray-400">
+                        {new Date(o.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {' · '}
+                        <span className="uppercase font-semibold text-gray-600">{o.payment_method === 'bank_transfer' ? 'BANK TRANSFER' : o.payment_method}</span>
+                        {(o.payment_method === 'gcash' || o.payment_method === 'bank_transfer') && (
+                          <label className="inline-flex items-center gap-1 ml-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!o.payment_verified}
+                              onChange={(e) => togglePaymentVerified(o.id, e.target.checked)}
+                              aria-label="Payment verified"
+                              className="w-3.5 h-3.5 accent-green-500"
+                            />
+                            <span className={'font-semibold ' + (o.payment_verified ? 'text-green-600' : 'text-amber-600')}>
+                              {o.payment_verified ? 'Verified' : 'Unverified'}
+                            </span>
+                          </label>
+                        )}
+                      </div>
                       <select
                         value={o.status}
                         disabled={updating === o.id}
                         onChange={(e) => updateStatus(o.id, e.target.value)}
+                        aria-label="Order status"
                         className={'text-xs font-semibold px-2 py-1 rounded-full border-0 ' + STATUS_COLORS[o.status]}
                       >
                         {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                       </select>
-                      <button onClick={() => setPrintOrder(o)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-full transition-colors">
-                        <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Receipt
-                      </button>
+                      <div className="flex gap-1 flex-wrap">
+                        <a href={`tel:${o.phone}`} title="Call customer" aria-label="Call customer" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                          <ClayIcon name="phone" className="w-4 h-4" />
+                        </a>
+                        <button onClick={() => setPrintOrder(o)} title="Print receipt" aria-label="Print receipt" className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-full transition-colors">
+                          <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Receipt
+                        </button>
+                        {NOTIFIABLE_STATUSES.includes(o.status) && (
+                          <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" aria-label="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                            {notifying === o.id ? '...' : <ClayIcon name="mobile" className="w-4 h-4" />}
+                          </button>
+                        )}
+                        {DELETABLE_STATUSES.includes(o.status) && (
+                          <button onClick={() => setDeleteModal(o)} title="Delete order" aria-label="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
+                            <ClayIcon name="trash" className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -840,6 +880,9 @@ export default function AdminPanel() {
 
           {/* ===== CUSTOMERS TAB ===== */}
           {activeTab === 'customers' && <CustomersTab savedPassword={savedPassword} onError={setAdminError} onCountChange={setCustTotal} />}
+
+          {/* ===== LOYALTY VOUCHER TAB ===== */}
+          {activeTab === 'loyalty' && <LoyaltyTab savedPassword={savedPassword} onError={setAdminError} />}
 
           {/* ===== ROUTE TAB ===== */}
           {activeTab === 'route' && <RouteTab savedPassword={savedPassword} onError={setAdminError} />}
