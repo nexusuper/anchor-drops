@@ -17,6 +17,10 @@
   --color-clay-uv: #7c3aed;
   --color-clay-danger: #dc2626;
   --color-clay-danger-bg: #fef2f2;
+  --color-clay-success: #15803d;
+  --color-clay-success-bg: #dcfce7;
+  --color-clay-warning: #a16207;
+  --color-clay-warning-bg: #fef9c3;
 }
 
 body {
@@ -41,6 +45,16 @@ h1, h2, h3, .font-display {
 .clay-inset {
   background: var(--color-clay-surface);
   box-shadow: inset 4px 4px 8px #bcd7e8, inset -4px -4px 8px #ffffff;
+}
+.clay-tile-sky {
+  background: linear-gradient(145deg, #e9f6ff, #d3ecfb);
+}
+.clay-tile-blue {
+  background: linear-gradient(145deg, #3b9dff, #0084ff);
+}
+.clay-tile-blue-shadow {
+  background: linear-gradient(145deg, #3b9dff, #0084ff);
+  box-shadow: 5px 5px 12px #b3c9e6, -3px -3px 8px #ffffff;
 }
 
 /* ---------- Skip link (keyboard users) ---------- */

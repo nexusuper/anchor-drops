@@ -21,7 +21,9 @@ export default function DashboardTab({ savedPassword }) {
   return (
     <div className="space-y-6">
       {loading && !dashboard && (
-        <p className="text-clay-ink/60 text-sm">Loading dashboard…</p>
+        <p className="text-clay-ink/60 text-sm" aria-busy="true">
+          <span className="clay-spinner inline-block align-middle mr-2" aria-hidden="true" /> Loading dashboard…
+        </p>
       )}
       {dashboard && (
         <>
@@ -47,25 +49,31 @@ export default function DashboardTab({ savedPassword }) {
 
           <div className="clay-raised rounded-2xl p-4">
             <p className="text-sm font-semibold text-clay-ink mb-3">Revenue — last 30 days</p>
-            {(() => {
-              const max = Math.max(1, ...dashboard.revenueSeries.map((d) => d.revenue));
-              return (
-                <div className="flex items-end gap-[2px] h-32">
-                  {dashboard.revenueSeries.map((d) => (
-                    <div
-                      key={d.date}
-                      title={`${d.date}: ₱${d.revenue.toLocaleString()} (${d.orders} orders)`}
-                      className="flex-1 bg-sky-400 hover:bg-sky-500 rounded-t transition-colors"
-                      style={{ height: `${Math.max(2, (d.revenue / max) * 100)}%` }}
-                    />
-                  ))}
+            {dashboard.revenueSeries.length === 0 ? (
+              <p className="text-sm text-clay-ink/50 py-8 text-center">No revenue data yet</p>
+            ) : (
+              <>
+                {(() => {
+                  const max = Math.max(1, ...dashboard.revenueSeries.map((d) => d.revenue));
+                  return (
+                    <div className="flex items-end gap-[2px] h-32">
+                      {dashboard.revenueSeries.map((d) => (
+                        <div
+                          key={d.date}
+                          title={`${d.date}: ₱${d.revenue.toLocaleString()} (${d.orders} orders)`}
+                          className="flex-1 bg-sky-400 hover:bg-sky-500 rounded-t transition-colors"
+                          style={{ height: `${Math.max(2, (d.revenue / max) * 100)}%` }}
+                        />
+                      ))}
+                    </div>
+                  );
+                })()}
+                <div className="flex justify-between text-[10px] text-clay-ink/50 mt-1">
+                  <span>{dashboard.revenueSeries[0]?.date}</span>
+                  <span>{dashboard.revenueSeries[dashboard.revenueSeries.length - 1]?.date}</span>
                 </div>
-              );
-            })()}
-            <div className="flex justify-between text-[10px] text-clay-ink/50 mt-1">
-              <span>{dashboard.revenueSeries[0]?.date}</span>
-              <span>{dashboard.revenueSeries[dashboard.revenueSeries.length - 1]?.date}</span>
-            </div>
+              </>
+            )}
           </div>
 
           <div className="clay-raised rounded-2xl p-4">

@@ -1,6 +1,37 @@
 import { useState, useEffect, useRef } from 'react';
 import ClayIcon from '../ui/ClayIcon';
 import { SEGMENT_DEFS } from '@/lib/segments';
+import { ORDER_STATUS_BADGE } from '@/lib/order-status';
+
+const STATUS_COLORS = ORDER_STATUS_BADGE;
+
+function daysAgoLabel(dateStr) {
+  if (!dateStr) return null;
+  const ts = new Date(dateStr).getTime();
+  if (!Number.isFinite(ts)) return null;
+  const days = Math.floor((Date.now() - ts) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return '1d ago';
+  return `${days}d ago`;
+}
+
+function segmentReason(c) {
+  const days = c.last_order ? Math.floor((Date.now() - new Date(c.last_order).getTime()) / 86_400_000) : null;
+  switch (c.segment) {
+    case 'churned':
+      return days != null ? `No order in ${days}d` : 'No recent order';
+    case 'at-risk':
+      return days != null ? `${days}d since last order` : 'Order pace slowing';
+    case 'vip':
+      return `${c.total_orders} orders · ₱${c.total_spent} spent`;
+    case 'regular':
+      return `${c.total_orders} orders`;
+    case 'new':
+      return 'First order(s) placed';
+    default:
+      return '';
+  }
+}
 
 export default function CustomersTab({ savedPassword, onError, onCountChange }) {
   const [customers, setCustomers] = useState([]);
@@ -35,6 +66,13 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
   const [custTotal, setCustTotal] = useState(0);
   const [selected, setSelected] = useState([]);
   const [deletingCust, setDeletingCust] = useState(false);
+
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    const onKeyDown = (e) => { if (e.key === 'Escape') setSelectedCustomer(null); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedCustomer]);
 
   function toggleSelect(phone) {
     setSelected((s) => (s.includes(phone) ? s.filter((p) => p !== phone) : [...s, phone]));
@@ -387,26 +425,26 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
           )}
 
           {/* Customer Stats Dashboard */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <div className="rounded-2xl p-4 text-center clay-raised-sm">
               <ClayIcon name="users" className="w-6 h-6 mx-auto mb-1 text-sky-600" />
               <div className="text-2xl font-bold text-sky-700">{custStats?.totalCustomers ?? '-'}</div>
-              <div className="text-xs text-gray-500">Total Customers</div>
+              <div className="text-xs text-clay-muted">Total Customers</div>
             </div>
             <div className="rounded-2xl p-4 text-center clay-raised-sm">
               <ClayIcon name="check" className="w-6 h-6 mx-auto mb-1 text-green-600" />
               <div className="text-2xl font-bold text-green-700">{custStats?.activeThisMonth ?? '-'}</div>
-              <div className="text-xs text-gray-500">Active This Month</div>
+              <div className="text-xs text-clay-muted">Active This Month</div>
             </div>
             <div className="rounded-2xl p-4 text-center clay-raised-sm">
               <ClayIcon name="star" className="w-6 h-6 mx-auto mb-1 text-amber-500" />
               <div className="text-2xl font-bold text-amber-600">{custStats?.newThisMonth ?? '-'}</div>
-              <div className="text-xs text-gray-500">New This Month</div>
+              <div className="text-xs text-clay-muted">New This Month</div>
             </div>
             <div className="rounded-2xl p-4 text-center clay-raised-sm">
               <ClayIcon name="user" className="w-6 h-6 mx-auto mb-1 text-purple-600" />
               <div className="text-lg font-bold text-purple-700 truncate">{custStats?.topSpender?.name ?? '-'}</div>
-              <div className="text-xs text-gray-500">Top Spender</div>
+              <div className="text-xs text-clay-muted">Top Spender</div>
             </div>
           </div>
 
@@ -415,7 +453,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
             <div className="flex flex-wrap gap-2 mb-4">
               <button
                 onClick={() => { setCustSegment(''); fetchCustomers(1, { segment: '' }); }}
-                className={'px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (!custSegment ? 'bg-sky-600 text-white' : 'clay-raised-sm text-gray-600 hover:bg-sky-50')}
+                className={'px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (!custSegment ? 'bg-sky-600 text-white' : 'clay-raised-sm text-clay-muted hover:bg-sky-50')}
               >
                 All ({custStats.totalCustomers})
               </button>
@@ -432,68 +470,72 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
           )}
 
           {/* Customer Search + Sort */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <input
-              type="text"
-              value={custSearch}
-              onChange={(e) => handleCustSearchChange(e.target.value)}
-              placeholder="Search customers by name or phone..."
-              className="clay-input flex-1"
-            />
-            {allTags.length > 0 && (
+          <div className="flex flex-col sm:flex-row gap-3 mb-4 sm:items-start">
+            <div className="flex flex-col sm:flex-row gap-3 flex-1">
+              <input
+                type="text"
+                value={custSearch}
+                onChange={(e) => handleCustSearchChange(e.target.value)}
+                placeholder="Search customers by name or phone..."
+                className="clay-input flex-1"
+              />
+              {allTags.length > 0 && (
+                <select
+                  value={custTagFilter}
+                  onChange={(e) => { setCustTagFilter(e.target.value); fetchCustomers(1, { tag: e.target.value }); setCustPage(1); }}
+                  className="clay-input"
+                >
+                  <option value="">All Tags</option>
+                  {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
               <select
-                value={custTagFilter}
-                onChange={(e) => { setCustTagFilter(e.target.value); fetchCustomers(1, { tag: e.target.value }); setCustPage(1); }}
+                value={custSort}
+                onChange={(e) => { setCustSort(e.target.value); fetchCustomers(1, { sort: e.target.value }); setCustPage(1); }}
                 className="clay-input"
               >
-                <option value="">All Tags</option>
-                {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+                <option value="last_order_desc">Last Order: Newest</option>
+                <option value="last_order_asc">Last Order: Oldest</option>
+                <option value="total_spent_desc">Spent: High to Low</option>
+                <option value="total_spent_asc">Spent: Low to High</option>
+                <option value="total_orders_desc">Orders: Most</option>
+                <option value="total_orders_asc">Orders: Fewest</option>
+                <option value="name_asc">Name: A to Z</option>
+                <option value="name_desc">Name: Z to A</option>
               </select>
-            )}
-            <select
-              value={custSort}
-              onChange={(e) => { setCustSort(e.target.value); fetchCustomers(1, { sort: e.target.value }); setCustPage(1); }}
-              className="clay-input"
-            >
-              <option value="last_order_desc">Last Order: Newest</option>
-              <option value="last_order_asc">Last Order: Oldest</option>
-              <option value="total_spent_desc">Spent: High to Low</option>
-              <option value="total_spent_asc">Spent: Low to High</option>
-              <option value="total_orders_desc">Orders: Most</option>
-              <option value="total_orders_asc">Orders: Fewest</option>
-              <option value="name_asc">Name: A to Z</option>
-              <option value="name_desc">Name: Z to A</option>
-            </select>
-            <button
-              onClick={exportCSV}
-              disabled={exporting}
-              className="clay-btn-white clay-pressable rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
-            >
-              <ClayIcon name="download" className="w-4 h-4" />
-              {exporting ? 'Exporting...' : 'Export CSV'}
-            </button>
-            {selected.length > 0 && (
+            </div>
+            <div className="flex gap-3">
               <button
-                onClick={deleteSelected}
-                disabled={deletingCust}
-                className="clay-pressable rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap bg-red-500 text-white hover:bg-red-600"
+                onClick={exportCSV}
+                disabled={exporting}
+                className="clay-btn-white clay-pressable rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
               >
-                <ClayIcon name="trash" className="w-4 h-4" />
-                {deletingCust ? 'Deleting...' : `Delete Selected (${selected.length})`}
+                <ClayIcon name="download" className="w-4 h-4" />
+                {exporting ? 'Exporting...' : 'Export CSV'}
               </button>
-            )}
+              {selected.length > 0 && (
+                <button
+                  onClick={deleteSelected}
+                  disabled={deletingCust}
+                  className="clay-pressable rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap bg-red-500 text-white hover:bg-red-600"
+                >
+                  <ClayIcon name="trash" className="w-4 h-4" />
+                  {deletingCust ? 'Deleting...' : `Delete Selected (${selected.length})`}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Customer Table */}
           <div className="clay-raised rounded-3xl overflow-hidden">
             {custLoading ? (
-              <div className="text-center py-12 text-gray-400">Loading customers...</div>
+              <div className="text-center py-12 text-clay-muted">Loading customers...</div>
             ) : customers.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">No customers found</div>
+              <div className="text-center py-12 text-clay-muted">No customers found</div>
             ) : (
               <>
                 <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="text-xs text-gray-400">Showing {customers.length} of {custTotal} customers (page {custPage})</span>
+                  <span className="text-xs text-clay-muted">Showing {customers.length} of {custTotal} customers (page {custPage})</span>
                 </div>
                 <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-sm">
@@ -508,13 +550,14 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                             onChange={toggleSelectAllOnPage}
                           />
                         </th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Customer</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Phone</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Orders</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Total Spent</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Last Order</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Tags</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Segment</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted">Customer</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted">Phone</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted">Orders</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted">Total Spent</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted">Last Order</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted">Tags</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted">Segment</th>
+                        <th className="text-left px-4 py-3 font-semibold text-clay-muted"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -534,16 +577,17 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <div className="font-medium text-gray-800 flex items-center gap-1">
+                            <div className="font-medium text-clay-ink flex items-center gap-1">
                               {c.customer_name}
                               {c.has_messenger && <ClayIcon name="chat" title="Messenger linked" className="w-4 h-4 inline text-blue-500" />}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-500 text-xs font-mono">{c.phone_display || c.phone_normalized}</td>
+                          <td className="px-4 py-3 text-clay-muted text-xs font-mono">{c.phone_display || c.phone_normalized}</td>
                           <td className="px-4 py-3 font-bold text-sky-600">{c.total_orders}</td>
                           <td className="px-4 py-3 font-bold text-sky-600">{'₱'}{c.total_spent}</td>
-                          <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                          <td className="px-4 py-3 text-clay-muted text-xs whitespace-nowrap">
                             {c.last_order ? new Date(c.last_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                            {c.last_order && <div className="text-[10px] text-clay-muted/70">{daysAgoLabel(c.last_order)}</div>}
                           </td>
                           <td className="px-4 py-3">
                             {c.tags && c.tags.length > 0 && (() => {
@@ -553,7 +597,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                                   {tagList.slice(0, 3).map((t) => (
                                     <span key={t} className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">{t.trim()}</span>
                                   ))}
-                                  {tagList.length > 3 && <span className="text-[10px] text-gray-400">+{tagList.length - 3}</span>}
+                                  {tagList.length > 3 && <span className="text-[10px] text-clay-muted">+{tagList.length - 3}</span>}
                                 </div>
                               );
                             })()}
@@ -561,8 +605,21 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                           <td className="px-4 py-3">
                             {c.segment && (() => {
                               const def = SEGMENT_DEFS.find((s) => s.value === c.segment);
-                              return def ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`}>{def.label}</span> : null;
+                              return def ? (
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`} title={segmentReason(c)}>{def.label}</span>
+                              ) : null;
                             })()}
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            {(c.segment === 'at-risk' || c.segment === 'churned') && c.has_messenger && (
+                              <button
+                                onClick={() => nudgeReorder(c)}
+                                disabled={nudging === c.phone_normalized}
+                                className="clay-btn-primary text-[10px] px-2 py-1 rounded-full disabled:opacity-50 whitespace-nowrap"
+                              >
+                                {nudging === c.phone_normalized ? '…' : 'Nudge'}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -581,7 +638,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                       />
                       <div onClick={() => fetchCustomerDetail(c.phone_normalized)} className="flex-1 space-y-1 cursor-pointer">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-gray-800 flex items-center gap-1">
+                        <span className="font-medium text-clay-ink flex items-center gap-1">
                           {c.customer_name}
                           {c.has_messenger && <ClayIcon name="chat" className="w-4 h-4 inline text-blue-500" />}
                         </span>
@@ -590,8 +647,8 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                           return def ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`}>{def.label}</span> : null;
                         })()}
                       </div>
-                      <div className="text-xs text-gray-400 font-mono">{c.phone_display || c.phone_normalized}</div>
-                      <div className="text-xs text-gray-600">{c.total_orders} orders · ₱{c.total_spent}</div>
+                      <div className="text-xs text-clay-muted font-mono">{c.phone_display || c.phone_normalized}</div>
+                      <div className="text-xs text-clay-muted">{c.total_orders} orders · ₱{c.total_spent}</div>
                       </div>
                     </div>
                   ))}
@@ -610,7 +667,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
               >
                 ← Prev
               </button>
-              <span className="text-sm text-gray-500 px-3">
+              <span className="text-sm text-clay-muted px-3">
                 Page {custPage} of {custTotalPages}
               </span>
               <button
@@ -625,13 +682,13 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
 
           {/* ===== CUSTOMER DETAIL SLIDE-OUT ===== */}
           {selectedCustomer && (
-            <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={`${selectedCustomer.customer_name} details`}>
               <div className="absolute inset-0 bg-black/30" onClick={() => setSelectedCustomer(null)} />
               <div className="relative w-full max-w-xl bg-clay-bg overflow-y-auto shadow-2xl">
                 {/* Detail Header */}
                 <div className="sticky top-0 z-10 text-white px-6 py-4" style={{ background: 'linear-gradient(160deg,#38bdf8,#0284c7)' }}>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setSelectedCustomer(null)} className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors">
+                    <button onClick={() => setSelectedCustomer(null)} aria-label="Close customer details" className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors">
                       <ClayIcon name="arrow-left" className="w-4 h-4" />
                     </button>
                     <div className="flex-1">
@@ -645,7 +702,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                       <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         {selectedCustomer.segment && (() => {
                           const def = SEGMENT_DEFS.find((s) => s.value === selectedCustomer.segment);
-                          return def ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`}>{def.label}</span> : null;
+                          return def ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${def.color}`}>{def.label} — {segmentReason(selectedCustomer)}</span> : null;
                         })()}
                         {selectedCustomer.notes && selectedCustomer.notes.flatMap((n) =>
                           (typeof n.tags === 'string' ? n.tags.split(',').filter(Boolean) : [])
@@ -665,13 +722,13 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                               onKeyDown={(e) => { if (e.key === 'Enter') addTagToCustomer(tagInputValue); if (e.key === 'Escape') { setShowTagInput(false); setTagInputValue(''); } }}
                               placeholder="Add tag..."
                               list="tag-suggestions"
-                              className="text-xs bg-white/20 border-0 rounded-full px-2 py-0.5 text-white placeholder-white/50 outline-none w-24"
+                              className="text-xs bg-white/20 border-0 rounded-full px-3 py-1 text-white placeholder-white/50 outline-none w-36"
                               autoFocus
                             />
                             <datalist id="tag-suggestions">
                               {allTags.map((t) => <option key={t} value={t} />)}
                             </datalist>
-                            <button onClick={() => { setShowTagInput(false); setTagInputValue(''); }} className="text-white/60 hover:text-white">
+                            <button onClick={() => { setShowTagInput(false); setTagInputValue(''); }} aria-label="Cancel adding tag" className="text-white/60 hover:text-white">
                               <ClayIcon name="close" className="w-3 h-3" />
                             </button>
                           </div>
@@ -686,21 +743,21 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="clay-raised-sm rounded-2xl p-3 text-center">
                       <div className="text-xl font-bold text-sky-700">{selectedCustomer.total_orders}</div>
-                      <div className="text-xs text-gray-500">Total Orders</div>
+                      <div className="text-xs text-clay-muted">Total Orders</div>
                     </div>
                     <div className="clay-raised-sm rounded-2xl p-3 text-center">
                       <div className="text-xl font-bold text-sky-700">{'₱'}{selectedCustomer.total_spent}</div>
-                      <div className="text-xs text-gray-500">Total Spent</div>
+                      <div className="text-xs text-clay-muted">Total Spent</div>
                     </div>
                     <div className="clay-raised-sm rounded-2xl p-3 text-center">
                       <div className="text-xl font-bold text-sky-700">
                         {selectedCustomer.total_orders > 0 ? `₱${Math.round(selectedCustomer.total_spent / selectedCustomer.total_orders)}` : '-'}
                       </div>
-                      <div className="text-xs text-gray-500">Avg Order</div>
+                      <div className="text-xs text-clay-muted">Avg Order</div>
                     </div>
                     <div className="clay-raised-sm rounded-2xl p-3 text-center">
                       <div className="text-xl font-bold text-emerald-600">{selectedCustomer.loyalty?.available ?? 0}</div>
-                      <div className="text-xs text-gray-500">Free Refills</div>
+                      <div className="text-xs text-clay-muted">Free Refills</div>
                     </div>
                   </div>
 
@@ -708,10 +765,10 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                   {selectedCustomer.loyalty && (
                     <div className="clay-raised-sm rounded-2xl p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold text-gray-700">
+                        <span className="text-sm font-semibold text-clay-ink">
                           <ClayIcon name="star" className="w-4 h-4 inline text-amber-500 mr-1" /> Loyalty Progress
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-clay-muted">
                           {selectedCustomer.loyalty.deliveredGallons} gal delivered &middot; {selectedCustomer.loyalty.gallonsToNext} gal to next free refill
                         </span>
                       </div>
@@ -726,24 +783,27 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
 
                   {/* Customer Info */}
                   <div className="clay-raised-sm rounded-2xl p-4 space-y-2">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    <h3 className="text-sm font-semibold text-clay-ink mb-2">
                       <ClayIcon name="info" className="w-4 h-4 inline mr-1" /> Customer Info
                     </h3>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div><span className="text-gray-400">Phone:</span></div>
-                      <div className="font-mono text-gray-700">{selectedCustomer.phone_display || selectedCustomer.phone_normalized}</div>
-                      <div><span className="text-gray-400">First Order:</span></div>
-                      <div className="text-gray-700">{selectedCustomer.first_order ? new Date(selectedCustomer.first_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</div>
-                      <div><span className="text-gray-400">Last Order:</span></div>
-                      <div className="text-gray-700">{selectedCustomer.last_order ? new Date(selectedCustomer.last_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</div>
-                      <div><span className="text-gray-400">Messenger:</span></div>
-                      <div>{selectedCustomer.has_messenger ? <span className="text-blue-600 font-medium">Linked</span> : <span className="text-gray-400">Not linked</span>}</div>
+                      <div><span className="text-clay-muted">Phone:</span></div>
+                      <div className="font-mono text-clay-ink">{selectedCustomer.phone_display || selectedCustomer.phone_normalized}</div>
+                      <div><span className="text-clay-muted">First Order:</span></div>
+                      <div className="text-clay-ink">{selectedCustomer.first_order ? new Date(selectedCustomer.first_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</div>
+                      <div><span className="text-clay-muted">Last Order:</span></div>
+                      <div className="text-clay-ink">
+                        {selectedCustomer.last_order ? new Date(selectedCustomer.last_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                        {selectedCustomer.last_order && <span className="text-clay-muted text-xs"> ({daysAgoLabel(selectedCustomer.last_order)})</span>}
+                      </div>
+                      <div><span className="text-clay-muted">Messenger:</span></div>
+                      <div>{selectedCustomer.has_messenger ? <span className="text-blue-600 font-medium">Linked</span> : <span className="text-clay-muted">Not linked</span>}</div>
                     </div>
                   </div>
 
                   {/* Containers Out */}
                   <div className="clay-raised-sm rounded-2xl p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    <h3 className="text-sm font-semibold text-clay-ink mb-2">
                       <ClayIcon name="jug" className="w-4 h-4 inline mr-1" /> Containers Out
                     </h3>
                     <div className="text-3xl font-bold text-sky-700 mb-3">{selectedCustomer.containers_out ?? 0}</div>
@@ -773,8 +833,8 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                         {selectedCustomer.containerAdjustments.map((a) => (
                           <div key={a.id} className="flex items-center justify-between text-xs clay-inset rounded-lg px-2 py-1">
                             <span className={'font-semibold ' + (a.delta > 0 ? 'text-sky-600' : 'text-amber-600')}>{a.delta > 0 ? '+' : ''}{a.delta}</span>
-                            <span className="text-gray-500 flex-1 px-2 truncate">{a.reason || '—'}</span>
-                            <span className="text-gray-400">{new Date(a.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
+                            <span className="text-clay-muted flex-1 px-2 truncate">{a.reason || '—'}</span>
+                            <span className="text-clay-muted">{new Date(a.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</span>
                           </div>
                         ))}
                       </div>
@@ -783,7 +843,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
 
                   {/* Notes Section */}
                   <div className="clay-raised-sm rounded-2xl p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                    <h3 className="text-sm font-semibold text-clay-ink mb-3">
                       <ClayIcon name="note" className="w-4 h-4 inline mr-1" /> Notes
                     </h3>
                     {/* Add Note Form */}
@@ -819,7 +879,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                           <div key={n.id} className="clay-inset rounded-xl p-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1">
-                                <p className="text-sm text-gray-700">{n.content}</p>
+                                <p className="text-sm text-clay-ink">{n.content}</p>
                                 {n.tags && (
                                   <div className="flex flex-wrap gap-1 mt-1">
                                     {(typeof n.tags === 'string' ? n.tags.split(',').filter(Boolean) : n.tags).map((t) => (
@@ -827,7 +887,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                                     ))}
                                   </div>
                                 )}
-                                <p className="text-[10px] text-gray-400 mt-1">
+                                <p className="text-[10px] text-clay-muted mt-1">
                                   {new Date(n.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               </div>
@@ -839,13 +899,13 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-400 text-center py-2">No notes yet</p>
+                      <p className="text-xs text-clay-muted text-center py-2">No notes yet</p>
                     )}
                   </div>
 
                   {/* Contact Log */}
                   <div className="clay-raised-sm rounded-2xl p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                    <h3 className="text-sm font-semibold text-clay-ink mb-3">
                       <ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> Contact Log
                     </h3>
                     {/* Add Log Entry */}
@@ -885,15 +945,15 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                         {selectedCustomer.contactLog.map((log) => (
                           <div key={log.id} className="clay-inset rounded-xl p-3 flex items-start gap-3">
                             <div className="flex-shrink-0 mt-0.5">
-                              <ClayIcon name={log.channel === 'messenger' ? 'chat' : log.channel === 'phone' ? 'phone' : 'note'} className="w-4 h-4 text-gray-400" />
+                              <ClayIcon name={log.channel === 'messenger' ? 'chat' : log.channel === 'phone' ? 'phone' : 'note'} className="w-4 h-4 text-clay-muted" />
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-semibold uppercase text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{log.channel}</span>
-                                <span className="text-[10px] text-gray-400">{log.direction}</span>
+                                <span className="text-[10px] font-semibold uppercase text-clay-muted bg-gray-100 px-2 py-0.5 rounded-full">{log.channel}</span>
+                                <span className="text-[10px] text-clay-muted">{log.direction}</span>
                               </div>
-                              <p className="text-sm text-gray-700 mt-0.5">{log.summary}</p>
-                              <p className="text-[10px] text-gray-400 mt-1">
+                              <p className="text-sm text-clay-ink mt-0.5">{log.summary}</p>
+                              <p className="text-[10px] text-clay-muted mt-1">
                                 {new Date(log.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </p>
                             </div>
@@ -901,14 +961,14 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-400 text-center py-2">No contact log entries</p>
+                      <p className="text-xs text-clay-muted text-center py-2">No contact log entries</p>
                     )}
                   </div>
 
                   {/* Messenger Quick-Send */}
                   {selectedCustomer.has_messenger && (
                     <div className="clay-raised-sm rounded-2xl p-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                      <h3 className="text-sm font-semibold text-clay-ink mb-3">
                         <ClayIcon name="send" className="w-4 h-4 inline mr-1" /> Send Messenger Message
                       </h3>
                       <div className="flex gap-2">
@@ -938,7 +998,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
 
                   {/* Order History */}
                   <div className="clay-raised-sm rounded-2xl p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                    <h3 className="text-sm font-semibold text-clay-ink mb-3">
                       <ClayIcon name="clipboard" className="w-4 h-4 inline mr-1" /> Order History
                     </h3>
                     {selectedCustomer.orders && selectedCustomer.orders.length > 0 ? (
@@ -946,21 +1006,21 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                         <table className="w-full text-sm">
                           <thead className="border-b border-gray-100">
                             <tr>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">ID</th>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Date</th>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Items</th>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Total</th>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-500 text-xs">Status</th>
+                              <th className="text-left px-3 py-2 font-semibold text-clay-muted text-xs">ID</th>
+                              <th className="text-left px-3 py-2 font-semibold text-clay-muted text-xs">Date</th>
+                              <th className="text-left px-3 py-2 font-semibold text-clay-muted text-xs">Items</th>
+                              <th className="text-left px-3 py-2 font-semibold text-clay-muted text-xs">Total</th>
+                              <th className="text-left px-3 py-2 font-semibold text-clay-muted text-xs">Status</th>
                             </tr>
                           </thead>
                           <tbody>
                             {selectedCustomer.orders.map((ord) => (
                               <tr key={ord.id} className="border-b border-gray-50">
                                 <td className="px-3 py-2 font-mono text-sky-600 text-xs">{ord.id}</td>
-                                <td className="px-3 py-2 text-gray-400 text-xs whitespace-nowrap">
+                                <td className="px-3 py-2 text-clay-muted text-xs whitespace-nowrap">
                                   {new Date(ord.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
                                 </td>
-                                <td className="px-3 py-2 text-gray-700 text-xs">{ord.product_type} x{ord.quantity}</td>
+                                <td className="px-3 py-2 text-clay-ink text-xs">{ord.product_type} x{ord.quantity}</td>
                                 <td className="px-3 py-2 font-bold text-sky-600 text-xs">{'₱'}{ord.total_amount}</td>
                                 <td className="px-3 py-2">
                                   <span className={'text-[10px] font-semibold px-2 py-0.5 rounded-full ' + (STATUS_COLORS[ord.status] || '')}>
@@ -973,7 +1033,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                         </table>
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-400 text-center py-2">No orders</p>
+                      <p className="text-xs text-clay-muted text-center py-2">No orders</p>
                     )}
                   </div>
                 </div>

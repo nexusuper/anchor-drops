@@ -85,7 +85,11 @@ export default function OpsShell({ title, subtitle, allow = ['owner', 'admin', '
         </header>
 
         <main className="max-w-6xl mx-auto px-4 py-6">
-          {loading && <p className="text-center py-16 text-gray-400">Loading…</p>}
+          {loading && (
+            <p className="text-center py-16 text-gray-400" aria-busy="true">
+              <span className="clay-spinner inline-block align-middle mr-2" aria-hidden="true" /> Loading…
+            </p>
+          )}
           {!loading && error && (
             <p className="clay-raised-sm rounded-2xl p-4 text-sm text-clay-danger bg-clay-danger-bg">{error}</p>
           )}

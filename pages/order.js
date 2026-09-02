@@ -519,7 +519,7 @@ export default function Order() {
               ))}
             </div>
 
-            {(form.payment_method === 'gcash' || form.payment_method === 'bank_transfer') && (
+            {form.payment_method === 'gcash' && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
                 <p className="text-sm text-clay-ink2">GCash: <strong>{GCASH_NUMBER_DISPLAY}</strong> (Anchor Drops)</p>
                 <div className="flex flex-col items-center gap-2 py-2">

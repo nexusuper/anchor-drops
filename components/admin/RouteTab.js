@@ -67,9 +67,9 @@ export default function RouteTab({ savedPassword, onError }) {
         </a>
       )}
       {loading ? (
-        <p className="text-center py-12 text-gray-400">Loading route...</p>
+        <p className="text-center py-12 text-clay-muted">Loading route...</p>
       ) : !route || route.total === 0 ? (
-        <p className="text-center py-12 text-gray-400">No deliveries scheduled for today.</p>
+        <p className="text-center py-12 text-clay-muted">No deliveries scheduled for today.</p>
       ) : (
         route.barangays.map((grp) => (
           <div key={grp.barangay}>
@@ -83,8 +83,8 @@ export default function RouteTab({ savedPassword, onError }) {
                         {o.customer_name}
                         {o.delivery_time && <span className="text-[10px] font-semibold text-sky-600">{o.delivery_date} {o.delivery_time}</span>}
                       </div>
-                      <div className="text-sm text-gray-600">{o.address}</div>
-                      <div className="text-xs text-gray-400">{o.product_type} x{o.quantity}</div>
+                      <div className="text-sm text-clay-muted">{o.address}</div>
+                      <div className="text-xs text-clay-muted">{o.product_type} x{o.quantity}</div>
                       <div className="flex items-center gap-3 mt-1">
                         <a href={`tel:${o.phone}`} className="text-xs text-clay-skydeep font-semibold inline-flex items-center gap-1">
                           <ClayIcon name="phone" className="w-3.5 h-3.5" /> {o.phone}
@@ -96,10 +96,10 @@ export default function RouteTab({ savedPassword, onError }) {
                     </div>
                     <div className="flex flex-col gap-1">
                       {o.status === 'confirmed' && (
-                        <button onClick={() => updateStatus(o.id, 'out_for_delivery')} className="text-[11px] bg-orange-100 text-orange-700 font-semibold px-2 py-1 rounded-full">Out</button>
+                        <button onClick={() => updateStatus(o.id, 'out_for_delivery')} className="text-xs bg-orange-100 text-orange-700 font-semibold px-3 min-h-11 rounded-full">Out</button>
                       )}
                       {o.status === 'out_for_delivery' && (
-                        <button onClick={() => updateStatus(o.id, 'delivered')} className="text-[11px] bg-green-100 text-green-700 font-semibold px-2 py-1 rounded-full">Delivered</button>
+                        <button onClick={() => updateStatus(o.id, 'delivered')} className="text-xs bg-clay-success-bg text-clay-success font-semibold px-3 min-h-11 rounded-full">Delivered</button>
                       )}
                     </div>
                   </div>

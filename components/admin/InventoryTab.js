@@ -7,6 +7,7 @@ export default function InventoryTab({ savedPassword, onLowStockCount }) {
   const [restockQty, setRestockQty] = useState({});
   const [adjustDelta, setAdjustDelta] = useState({});
   const [saving, setSaving] = useState(null);
+  const [fieldError, setFieldError] = useState(null);
 
   const fetchInventory = useCallback(async () => {
     setLoading(true);
@@ -25,7 +26,8 @@ export default function InventoryTab({ savedPassword, onLowStockCount }) {
 
   async function restockProduct(productId) {
     const qty = parseInt(restockQty[productId], 10);
-    if (!qty || qty < 1) return;
+    if (!qty || qty < 1) { setFieldError(productId + ':restock'); return; }
+    setFieldError(null);
     setSaving(productId + ':restock');
     try {
       await apiFetch('/api/inventory/restock', { method: 'POST', password: savedPassword, body: { product_id: productId, quantity: qty } });
@@ -40,7 +42,8 @@ export default function InventoryTab({ savedPassword, onLowStockCount }) {
 
   async function adjustProduct(productId) {
     const delta = parseInt(adjustDelta[productId], 10);
-    if (!delta || delta === 0) return;
+    if (!delta || delta === 0) { setFieldError(productId + ':adjust'); return; }
+    setFieldError(null);
     setSaving(productId + ':adjust');
     try {
       await apiFetch('/api/inventory/adjust', { method: 'POST', password: savedPassword, body: { product_id: productId, delta } });
@@ -77,7 +80,7 @@ export default function InventoryTab({ savedPassword, onLowStockCount }) {
                     type="number" min="1" placeholder="Qty"
                     value={restockQty[it.product_id] || ''}
                     onChange={(e) => setRestockQty((s) => ({ ...s, [it.product_id]: e.target.value }))}
-                    className="clay-inset rounded-lg px-2 py-1 w-20 text-sm"
+                    className="clay-input w-20 text-sm py-1.5 px-2"
                   />
                   <button
                     onClick={() => restockProduct(it.product_id)}
@@ -87,13 +90,16 @@ export default function InventoryTab({ savedPassword, onLowStockCount }) {
                     {saving === it.product_id + ':restock' ? '…' : 'Restock'}
                   </button>
                 </div>
+                {fieldError === it.product_id + ':restock' && (
+                  <p className="text-xs text-clay-danger mt-1" role="alert">Enter a quantity of at least 1</p>
+                )}
 
                 <div className="mt-2 flex items-center gap-2">
                   <input
                     type="number" placeholder="+/−"
                     value={adjustDelta[it.product_id] || ''}
                     onChange={(e) => setAdjustDelta((s) => ({ ...s, [it.product_id]: e.target.value }))}
-                    className="clay-inset rounded-lg px-2 py-1 w-20 text-sm"
+                    className="clay-input w-20 text-sm py-1.5 px-2"
                   />
                   <button
                     onClick={() => adjustProduct(it.product_id)}
@@ -103,6 +109,9 @@ export default function InventoryTab({ savedPassword, onLowStockCount }) {
                     {saving === it.product_id + ':adjust' ? '…' : 'Adjust'}
                   </button>
                 </div>
+                {fieldError === it.product_id + ':adjust' && (
+                  <p className="text-xs text-clay-danger mt-1" role="alert">Enter a non-zero adjustment</p>
+                )}
               </div>
             ))}
           </div>

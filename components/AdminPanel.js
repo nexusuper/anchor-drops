@@ -401,7 +401,7 @@ export default function AdminPanel() {
             <div>
               <h1 className="text-xl font-bold">Anchor Drops — Admin</h1>
               <p className="text-sky-200 text-sm">
-                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? "Today's deliveries" : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? 'Payment screenshots' : activeTab === 'loyalty' ? 'Order-count voucher tracker' : 'Business overview'}
+                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? "Today's deliveries" : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? 'Payment screenshots' : activeTab === 'loyalty' ? 'Order-count voucher tracker' : activeTab === 'pickups' ? 'Container pickups' : activeTab === 'expenses' ? 'Business expenses' : 'Business overview'}
               </p>
             </div>
             <div className="flex gap-3">

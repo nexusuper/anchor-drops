@@ -35,15 +35,11 @@ export default function Navbar() {
               key={l.href}
               href={l.href}
               aria-current={isActive(l.href) ? 'page' : undefined}
-              className="relative font-semibold text-sm transition-colors"
-              style={{ color: isActive(l.href) ? '#0284c7' : '#5b7c91' }}
+              className={'relative font-semibold text-sm transition-colors ' + (isActive(l.href) ? 'text-clay-skydeep' : 'text-clay-muted')}
             >
               {l.label}
               {isActive(l.href) && (
-                <span
-                  className="absolute -bottom-0.5 left-0 right-0 h-[2px] rounded-full"
-                  style={{ background: '#38bdf8' }}
-                />
+                <span className="absolute -bottom-0.5 left-0 right-0 h-[2px] rounded-full bg-clay-sky" />
               )}
             </Link>
           ))}
@@ -74,8 +70,7 @@ export default function Navbar() {
               key={l.href}
               href={l.href}
               aria-current={isActive(l.href) ? 'page' : undefined}
-              className="py-2 font-semibold text-sm"
-              style={{ color: isActive(l.href) ? '#0284c7' : '#5b7c91' }}
+              className={'py-3 font-semibold text-sm ' + (isActive(l.href) ? 'text-clay-skydeep' : 'text-clay-muted')}
               onClick={() => setOpen(false)}
             >
               {l.label}

@@ -16,6 +16,7 @@ export default function ExpensesTab({ savedPassword, onError }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [amountError, setAmountError] = useState(false);
 
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [amount, setAmount] = useState('');
@@ -47,7 +48,8 @@ export default function ExpensesTab({ savedPassword, onError }) {
   async function addExpense(e) {
     e.preventDefault();
     const amt = Number(amount);
-    if (!amt || amt <= 0) return;
+    if (!amt || amt <= 0) { setAmountError(true); return; }
+    setAmountError(false);
     setSaving(true);
     try {
       await apiFetch('/api/expenses', {
@@ -92,6 +94,7 @@ export default function ExpensesTab({ savedPassword, onError }) {
           <div>
             <label className="block text-sm font-medium text-clay-ink2 mb-1">Amount (₱)</label>
             <input type="number" min="0" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} className="clay-input" placeholder="0.00" />
+            {amountError && <p className="text-xs text-clay-danger mt-1" role="alert">Enter an amount greater than 0</p>}
           </div>
           <div>
             <label className="block text-sm font-medium text-clay-ink2 mb-1">Date</label>
@@ -148,8 +151,8 @@ export default function ExpensesTab({ savedPassword, onError }) {
             ) : (
               <ul className="divide-y divide-clay-ink/5">
                 {data.expenses.map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 py-2">
-                    <div className="min-w-0 flex-1">
+                  <li key={e.id} className="flex flex-wrap items-center gap-2 py-2">
+                    <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                       <p className="text-sm font-semibold text-clay-ink capitalize">
                         {e.category}
                         <span className="text-clay-ink/40 font-normal"> · {e.spent_at}</span>
@@ -166,7 +169,8 @@ export default function ExpensesTab({ savedPassword, onError }) {
                       onClick={() => removeExpense(e.id)}
                       disabled={deleting === e.id}
                       title="Delete expense"
-                      className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50"
+                      aria-label="Delete expense"
+                      className="text-xs bg-clay-danger-bg hover:bg-red-200 text-clay-danger font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50"
                     >
                       <ClayIcon name="trash" className="w-4 h-4" />
                     </button>

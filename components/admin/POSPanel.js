@@ -186,9 +186,9 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
             />
           </div>
         </div>
-        {loyaltyLoading && <p className="text-xs text-clay-ink/50">Checking loyalty status…</p>}
+        {loyaltyLoading && <p className="text-xs text-clay-ink/50" role="status">Checking loyalty status…</p>}
         {loyalty && !loyaltyLoading && (
-          <p className="text-xs text-clay-skydeep font-medium">Available vouchers: {availableVouchers} (₱30 off a refill each)</p>
+          <p className="text-xs text-clay-skydeep font-medium" role="status">Available vouchers: {availableVouchers} (₱30 off a refill each)</p>
         )}
       </div>
 
@@ -238,8 +238,8 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
         <div className="space-y-3">
           {lines.map((line, idx) => (
             <div key={idx} className="clay-inset rounded-2xl p-4 space-y-3">
-              <div className="flex gap-3 items-start">
-                <select value={line.product_type} onChange={(e) => updateLine(idx, { product_type: e.target.value })} className="clay-input flex-1">
+              <div className="flex flex-wrap gap-3 items-start">
+                <select value={line.product_type} onChange={(e) => updateLine(idx, { product_type: e.target.value })} aria-label="Product" className="clay-input flex-1 min-w-[10rem]">
                   {PRODUCTS.map((p) => (
                     <option key={p.id} value={p.id}>{p.name} — ₱{p.refill}</option>
                   ))}
@@ -250,6 +250,7 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
                   max="50"
                   value={line.quantity}
                   onChange={(e) => updateLine(idx, { quantity: e.target.value })}
+                  aria-label="Quantity"
                   className="clay-input w-20"
                 />
                 {lines.length > 1 && (
@@ -294,7 +295,7 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
             <label className="block text-sm font-medium text-clay-ink2 mb-1">Cash Tendered</label>
             <input type="number" min="0" value={cashTendered} onChange={(e) => setCashTendered(e.target.value)} className="clay-input" placeholder="0.00" />
             {cashTendered !== '' && (
-              <p className={`text-sm mt-1 ${cashNum < estTotal ? 'text-amber-600' : 'text-emerald-600'}`}>
+              <p className={`text-sm mt-1 ${cashNum < estTotal ? 'text-amber-600' : 'text-emerald-600'}`} role="status">
                 {cashNum < estTotal ? `Short by ₱${(estTotal - cashNum).toFixed(2)}` : `Change due: ₱${estChange.toFixed(2)}`}
               </p>
             )}

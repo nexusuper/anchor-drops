@@ -61,9 +61,9 @@ export default function Home() {
 
       {/* Stats bar */}
       <section className="max-w-6xl mx-auto px-4 pb-12">
-        <div className="reveal clay-raised rounded-2xl px-6 py-5 grid grid-cols-3 divide-x divide-sky-100">
+        <div className="reveal clay-raised rounded-2xl px-2 sm:px-6 py-5 grid grid-cols-3 divide-x divide-sky-100">
           {stats.map((s) => (
-            <div key={s.label} className="text-center px-4 py-1">
+            <div key={s.label} className="text-center px-1 sm:px-4 py-1">
               <div className="font-editorial font-bold text-2xl md:text-3xl text-clay-skydeep">{s.num}</div>
               <div className="text-xs font-bold text-clay-muted mt-0.5 tracking-wide uppercase">{s.label}</div>
             </div>
@@ -99,13 +99,9 @@ export default function Home() {
             {features.map((f, i) => (
               <div
                 key={f.title}
-                className="flex items-start gap-5 p-7"
-                style={i < features.length - 1 ? { borderBottom: '1px solid #e0f2fe' } : {}}
+                className={'flex items-start gap-5 p-7' + (i < features.length - 1 ? ' border-b border-sky-100' : '')}
               >
-                <div
-                  className="shrink-0 grid place-items-center w-12 h-12 rounded-[16px] clay-raised-sm"
-                  style={{ background: 'linear-gradient(145deg,#e9f6ff,#d3ecfb)' }}
-                >
+                <div className="shrink-0 grid place-items-center w-12 h-12 rounded-[16px] clay-raised-sm clay-tile-sky">
                   <ClayIcon name={f.icon} className="w-6 h-6 text-clay-sky" />
                 </div>
                 <div>
@@ -170,8 +166,7 @@ export default function Home() {
       <section className="px-4 pb-16">
         <ClayCard className="reveal max-w-3xl mx-auto p-8 md:p-10 text-center">
           <div
-            className="mx-auto mb-4 grid place-items-center w-14 h-14 rounded-[18px] clay-raised-sm"
-            style={{ background: 'linear-gradient(145deg,#3b9dff,#0084ff)' }}
+            className="mx-auto mb-4 grid place-items-center w-14 h-14 rounded-[18px] clay-raised-sm clay-tile-blue"
           >
             <ClayIcon name="chat" className="w-7 h-7 text-white" />
           </div>
@@ -185,8 +180,7 @@ export default function Home() {
               href={`https://m.me/${FB_PAGE_ID}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-4 font-editorial font-semibold text-white clay-pressable"
-              style={{ background: 'linear-gradient(145deg,#3b9dff,#0084ff)', boxShadow: '5px 5px 12px #b3c9e6, -3px -3px 8px #ffffff' }}
+              className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-4 font-editorial font-semibold text-white clay-pressable clay-tile-blue-shadow"
             >
               <ClayIcon name="chat" className="w-5 h-5" /> Chat on Messenger
             </a>

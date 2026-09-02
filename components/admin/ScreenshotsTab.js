@@ -38,6 +38,24 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
+  // The `download` attribute is ignored by browsers on cross-origin URLs (Supabase
+  // signed URLs), which silently opened the image instead of saving it — fetch as a
+  // blob so the save actually happens.
+  async function downloadScreenshot(url, filename) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      onError?.('Failed to download screenshot');
+    }
+  }
+
   async function deleteScreenshots(ids) {
     setDeleting(true);
     try {
@@ -57,13 +75,13 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="clay-raised rounded-3xl p-6 max-w-sm w-full">
             <ClayIcon name="trash" className="w-8 h-8 mx-auto mb-3 text-red-500" />
-            <h2 className="text-lg font-bold text-gray-800 text-center mb-2">
+            <h2 className="text-lg font-bold text-clay-ink text-center mb-2">
               Delete {selected.length} screenshot{selected.length > 1 ? 's' : ''}?
             </h2>
-            <p className="text-sm text-gray-500 text-center mb-2">The order itself will be kept — only the attached image is removed.</p>
+            <p className="text-sm text-clay-muted text-center mb-2">The order itself will be kept — only the attached image is removed.</p>
             <p className="text-xs text-red-400 text-center mb-5">This cannot be undone.</p>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteModal(false)} className="flex-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={() => setDeleteModal(false)} className="flex-1 border border-gray-200 text-clay-muted font-semibold py-2 rounded-full hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={() => deleteScreenshots(selected)} disabled={deleting} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-full transition-colors disabled:opacity-50">
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
@@ -93,7 +111,7 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
         <p className="text-clay-ink/60 text-sm">Loading screenshots…</p>
       )}
       {!loading && screenshots.length === 0 && (
-        <div className="clay-raised rounded-2xl p-12 text-center text-gray-400">No payment screenshots yet</div>
+        <div className="clay-raised rounded-2xl p-12 text-center text-clay-muted">No payment screenshots yet</div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -109,28 +127,27 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
                 />
                 <span className="font-mono font-bold text-sky-600 text-sm">{s.id}</span>
               </label>
-              <span className="text-[10px] uppercase font-semibold text-gray-500">{s.payment_method === 'bank_transfer' ? 'BANK TRANSFER' : s.payment_method}</span>
+              <span className="text-[10px] uppercase font-semibold text-clay-muted">{s.payment_method === 'bank_transfer' ? 'BANK TRANSFER' : s.payment_method}</span>
             </div>
             <a href={s.payment_screenshot_path} target="_blank" rel="noopener noreferrer">
               <img src={s.payment_screenshot_path} alt={`Payment screenshot for order ${s.id}`} className="w-full h-40 object-cover rounded-xl border border-gray-200 hover:opacity-90 mb-2" />
             </a>
-            <div className="text-sm text-gray-700 font-medium">{s.customer_name}</div>
-            <div className="text-xs text-gray-400">{s.phone}</div>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-sm text-clay-ink font-medium">{s.customer_name}</div>
+            <div className="text-xs text-clay-muted">{s.phone}</div>
+            <div className="text-xs text-clay-muted mt-1">
               {new Date(s.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </div>
-            {s.reference_number && <div className="text-xs text-gray-400">Ref: {s.reference_number}</div>}
+            {s.reference_number && <div className="text-xs text-clay-muted">Ref: {s.reference_number}</div>}
             <div className="flex gap-2 mt-3">
-              <a
-                href={s.payment_screenshot_path}
-                download={`payment-${s.id}.jpg`}
+              <button
+                onClick={() => downloadScreenshot(s.payment_screenshot_path, `payment-${s.id}.jpg`)}
                 className="flex-1 text-center text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1.5 rounded-full transition-colors"
               >
                 <ClayIcon name="download" className="w-3.5 h-3.5 inline mr-1" /> Download
-              </a>
+              </button>
               <button
                 onClick={() => { setSelected([s.id]); setDeleteModal(true); }}
-                className="flex-1 text-center text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1.5 rounded-full transition-colors"
+                className="flex-1 text-center text-xs bg-clay-danger-bg hover:bg-red-200 text-clay-danger font-semibold px-2 py-1.5 rounded-full transition-colors"
               >
                 <ClayIcon name="trash" className="w-3.5 h-3.5 inline mr-1" /> Delete
               </button>
@@ -148,7 +165,7 @@ export default function ScreenshotsTab({ savedPassword, onError }) {
           >
             Previous
           </button>
-          <span className="text-sm text-gray-500">Page {page} of {totalPages}</span>
+          <span className="text-sm text-clay-muted">Page {page} of {totalPages}</span>
           <button
             disabled={page >= totalPages || loading}
             onClick={() => fetchScreenshots(page + 1)}

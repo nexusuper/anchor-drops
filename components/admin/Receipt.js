@@ -6,12 +6,12 @@ export default function Receipt({ receipt }) {
     <div className="clay-raised rounded-3xl p-6 print:shadow-none print:rounded-none" id="pos-receipt">
       <div className="text-center mb-4">
         <h2 className="text-xl font-bold text-clay-ink font-display">Anchor Drops</h2>
-        <p className="text-xs text-clay-ink/60">{receipt.transaction_id} &middot; {new Date(receipt.created_at).toLocaleString()}</p>
+        <p className="text-xs text-clay-muted">{receipt.transaction_id} &middot; {new Date(receipt.created_at).toLocaleString()}</p>
       </div>
       <div className="text-sm text-clay-ink mb-3">
         <p><strong>{receipt.customer_name}</strong> &middot; {receipt.phone}</p>
-        <p className="text-clay-ink/60 capitalize">{receipt.fulfillment_type === 'pickup' ? 'Counter pickup' : 'Delivery'}</p>
-        {receipt.address && <p className="text-clay-ink/60">{receipt.address}{receipt.barangay ? `, ${receipt.barangay}` : ''}</p>}
+        <p className="text-clay-muted capitalize">{receipt.fulfillment_type === 'pickup' ? 'Counter pickup' : 'Delivery'}</p>
+        {receipt.address && <p className="text-clay-muted">{receipt.address}{receipt.barangay ? `, ${receipt.barangay}` : ''}</p>}
       </div>
       <div className="border-t border-b border-clay-ink/10 py-3 mb-3 space-y-1">
         {receipt.lines.map((l) => (
@@ -26,11 +26,11 @@ export default function Receipt({ receipt }) {
         {receipt.delivery_fee > 0 && <div className="flex justify-between"><span>Delivery fee</span><span>₱{receipt.delivery_fee.toFixed(2)}</span></div>}
         {receipt.voucher_discount_total > 0 && <div className="flex justify-between text-emerald-600"><span>Voucher discount ({receipt.voucher_count_total})</span><span>-₱{receipt.voucher_discount_total.toFixed(2)}</span></div>}
         <div className="flex justify-between font-bold text-base pt-1 border-t border-clay-ink/10"><span>Total</span><span>₱{receipt.total_amount.toFixed(2)}</span></div>
-        <div className="flex justify-between text-clay-ink/60"><span>Payment</span><span className="capitalize">{receipt.payment_method}</span></div>
+        <div className="flex justify-between text-clay-muted"><span>Payment</span><span className="capitalize">{receipt.payment_method}</span></div>
         {receipt.cash_tendered != null && (
           <>
-            <div className="flex justify-between text-clay-ink/60"><span>Cash tendered</span><span>₱{Number(receipt.cash_tendered).toFixed(2)}</span></div>
-            <div className="flex justify-between text-clay-ink/60"><span>Change due</span><span>₱{Number(receipt.change_due).toFixed(2)}</span></div>
+            <div className="flex justify-between text-clay-muted"><span>Cash tendered</span><span>₱{Number(receipt.cash_tendered).toFixed(2)}</span></div>
+            <div className="flex justify-between text-clay-muted"><span>Change due</span><span>₱{Number(receipt.change_due).toFixed(2)}</span></div>
           </>
         )}
       </div>

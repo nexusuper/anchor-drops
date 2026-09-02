@@ -21,10 +21,10 @@ function StatusStepper({ status }) {
 
   if (isCancelled) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
-        <ClayIcon name="cancel" className="w-10 h-10 mx-auto text-red-500" />
-        <p className="text-red-700 font-semibold">This order has been cancelled.</p>
-        <p className="text-red-400 text-sm mt-1">Please contact us if you have questions.</p>
+      <div className="bg-clay-danger-bg border border-clay-danger/20 rounded-2xl p-6 text-center">
+        <ClayIcon name="cancel" className="w-10 h-10 mx-auto text-clay-danger" />
+        <p className="text-clay-danger font-semibold">This order has been cancelled.</p>
+        <p className="text-clay-danger/70 text-sm mt-1">Please contact us if you have questions.</p>
       </div>
     );
   }

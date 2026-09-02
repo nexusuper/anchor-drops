@@ -9,6 +9,7 @@ import ClayIcon from '@/components/ui/ClayIcon';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 import { STORE_HOURS_LABEL } from '@/lib/scheduling';
 import { readOrderPhone } from '@/lib/client-storage';
+import { ORDER_STATUS } from '@/lib/order-status';
 
 const DELIVERY_SLOT_LABELS = {
   pickup: 'Counter pickup',
@@ -17,11 +18,11 @@ const DELIVERY_SLOT_LABELS = {
 };
 
 const STATUS_LABELS = {
-  pending: { label: 'Pending', color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
-  confirmed: { label: 'Confirmed', color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  out_for_delivery: { label: 'Out for Delivery', color: 'text-orange-600 bg-orange-50 border-orange-200' },
-  delivered: { label: 'Delivered ✓', color: 'text-green-600 bg-green-50 border-green-200' },
-  cancelled: { label: 'Cancelled', color: 'text-red-600 bg-red-50 border-red-200' },
+  pending: { label: ORDER_STATUS.pending.label, color: ORDER_STATUS.pending.badge },
+  confirmed: { label: ORDER_STATUS.confirmed.label, color: ORDER_STATUS.confirmed.badge },
+  out_for_delivery: { label: ORDER_STATUS.out_for_delivery.label, color: ORDER_STATUS.out_for_delivery.badge },
+  delivered: { label: ORDER_STATUS.delivered.label + ' ✓', color: ORDER_STATUS.delivered.badge },
+  cancelled: { label: ORDER_STATUS.cancelled.label, color: ORDER_STATUS.cancelled.badge },
 };
 
 export default function Confirmation() {
@@ -162,7 +163,7 @@ export default function Confirmation() {
               <div className="space-y-2 text-base">
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Status</span>
-                  <span className={`font-semibold px-2 py-0.5 rounded-full border text-xs ${status?.color}`}>{status?.label}</span>
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-xs ${status?.color}`}>{status?.label}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Name</span>
