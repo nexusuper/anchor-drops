@@ -15,6 +15,7 @@ import {
   DRAFT_KEY, readStored, readIdentity, writeIdentity, clearIdentity, writeOrderPhone,
 } from '@/lib/client-storage';
 import { uuidv4 } from '@/lib/uuid';
+import { CDO_BARANGAYS, matchBarangay } from '@/lib/service-area';
 
 // Downscales/compresses a photo before storing it as a data URL, so payment
 // screenshots (often multi-MB phone photos) stay small enough for a text column.
@@ -182,6 +183,7 @@ export default function Order() {
     return /^09\d{9}$/.test(d) || /^639\d{9}$/.test(d);
   };
   const phoneInvalid = form.phone.trim().length > 0 && !isPhMobile(form.phone);
+  const barangayInvalid = form.barangay.trim().length > 0 && !matchBarangay(form.barangay);
   const gcashInvalid = form.payment_method === 'gcash' && form.gcash_number.trim().length > 0 && !isPhMobile(form.gcash_number);
 
   const today = manilaToday();
@@ -263,6 +265,10 @@ export default function Order() {
     setError('');
     if (!isPhMobile(form.phone)) {
       setError('Please enter a valid PH mobile number (09XX-XXX-XXXX).');
+      return;
+    }
+    if (!matchBarangay(form.barangay)) {
+      setError('We deliver within Cagayan de Oro only. Please pick your barangay from the list.');
       return;
     }
     if (form.payment_method === 'gcash' && form.gcash_number.trim() && !isPhMobile(form.gcash_number)) {
@@ -356,7 +362,14 @@ export default function Order() {
               </div>
               <div>
                 <label htmlFor="barangay" className="block text-sm font-medium text-clay-ink2 mb-1">Barangay *</label>
-                <input id="barangay" required value={form.barangay} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" autoComplete="address-level3" />
+                {/* ponytail: native datalist, not a combobox component — it
+                    autocompletes the real barangay names so most customers never
+                    hit the server-side rejection below. */}
+                <input id="barangay" required list="cdo-barangays" value={form.barangay} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" autoComplete="address-level3" />
+                <datalist id="cdo-barangays">
+                  {CDO_BARANGAYS.map((b) => <option key={b} value={b} />)}
+                </datalist>
+                {barangayInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">We deliver within Cagayan de Oro only. Pick your barangay from the list.</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-clay-ink2 mb-1">Pin your location on the map (optional)</label>

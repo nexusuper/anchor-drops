@@ -7,6 +7,11 @@ import { verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID } from '@/lib/products';
 import { validateSchedule, manilaToday } from '@/lib/scheduling';
+import { matchBarangay } from '@/lib/service-area';
+import {
+  isValidPhonePH, isPlausibleName, isPlausibleAddress,
+  strikeVerdict, phoneVariants, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
+} from '@/lib/order-guard';
 import { z } from 'zod';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
@@ -138,6 +143,25 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Unknown product' });
     }
 
+    // Junk filter. Zod only bounds length, so a one-character address and a
+    // name of digits both parsed as valid orders. These are the "plausibly
+    // real" floors; see lib/order-guard.js.
+    if (!isValidPhonePH(phone)) {
+      return res.status(400).json({ error: 'Please enter a valid Philippine mobile number (09XXXXXXXXX).' });
+    }
+    if (!isPlausibleName(customer_name)) {
+      return res.status(400).json({ error: 'Please enter your name.' });
+    }
+    if (!isPlausibleAddress(address)) {
+      return res.status(400).json({ error: 'Please enter a complete delivery address (house/street details).' });
+    }
+    // Store the canonical spelling, not the customer's, so the delivery route
+    // and barangay reports stop splitting over "Brgy. Bugo" vs "bugo".
+    const canonicalBarangay = matchBarangay(barangay);
+    if (!canonicalBarangay) {
+      return res.status(400).json({ error: 'We deliver within Cagayan de Oro only. Please enter a valid barangay.' });
+    }
+
     const hasEmptyContainers = !!has_empty_containers;
     const today = manilaToday();
     const scheduleCheck = validateSchedule({
@@ -155,6 +179,50 @@ export default async function handler(req, res) {
     try {
     const supabase = getSupabase();
     const normPhone = normalizePhone(phone);
+
+    // Strike policy: a phone whose orders the riders marked no_show loses COD,
+    // then loses online ordering. Counting the flag on orders rather than a
+    // counter on the customer keeps it auditable and drift-free.
+    //
+    // Matched against every spelling of the number, not just normPhone: the
+    // stored key is the raw digits the customer typed, so "+63917..." and
+    // "0917..." are two different rows and a single-key lookup would let a
+    // blocked number back in just by switching format. See phoneVariants().
+    const phoneKeys = phoneVariants(phone);
+    const { count: strikes, error: strikeErr } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .in('phone_normalized', phoneKeys)
+      .eq('no_show', true);
+    if (strikeErr) {
+      // Fail open: a lookup outage must not stop paying customers ordering.
+      console.error('No-show strike lookup failed:', strikeErr);
+    } else {
+      const verdict = strikeVerdict(strikes || 0, payment_method);
+      if (!verdict.ok) return res.status(403).json({ error: verdict.error });
+    }
+
+    // Per-phone throttle for numbers that have never completed an order. The
+    // shared rate limiter is per-IP and per-instance, so it does not stop a
+    // spammer cycling phone numbers from a mobile connection.
+    const { data: history, error: historyErr } = await supabase
+      .from('orders')
+      .select('status, created_at')
+      .in('phone_normalized', phoneKeys)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (!historyErr && history && history.length > 0) {
+      const trusted = history.some((o) => o.status === 'delivered');
+      if (!trusted) {
+        const since = Date.now() - NEW_PHONE_WINDOW_MS;
+        const recent = history.filter((o) => new Date(o.created_at).getTime() >= since).length;
+        if (recent >= NEW_PHONE_MAX_ORDERS) {
+          return res.status(429).json({
+            error: 'You already have several open orders. Please message us on Facebook to add more.',
+          });
+        }
+      }
+    }
 
     // supabase-js resolves with { data: null, error } rather than throwing, so
     // the error has to be read explicitly or a failed lookup silently reads as
@@ -286,7 +354,7 @@ export default async function handler(req, res) {
       p_customer_name: customer_name,
       p_phone: phone,
       p_address: address,
-      p_barangay: barangay,
+      p_barangay: canonicalBarangay,
       p_address_label: 'Home',
       p_product_type: product_type,
       p_container_size: containerSize,
@@ -323,7 +391,7 @@ export default async function handler(req, res) {
       const { error: pickupErr } = await supabase.from('container_pickups').insert({
         branch_id: DEFAULT_BRANCH_ID,
         order_id: order.id,
-        customer_name, phone, address, barangay,
+        customer_name, phone, address, barangay: canonicalBarangay,
         container_qty: quantity,
         pickup_date: pickupDate, pickup_time: pickupTime,
         delivery_date: deliveryDate, delivery_time: deliveryTime,

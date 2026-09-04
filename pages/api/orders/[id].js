@@ -12,6 +12,9 @@ import { z } from 'zod';
 const PatchSchema = z.object({
   status: z.enum(['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled']).optional(),
   payment_verified: z.boolean().optional(),
+  // Rider went, nobody there. Admin-only, and one strike against the phone —
+  // see the 0038 migration and lib/order-guard.js for the policy it feeds.
+  no_show: z.boolean().optional(),
 });
 
 // Customer self-cancel: the only non-admin mutation. Phone-gated exactly like
@@ -117,9 +120,25 @@ export default async function handler(req, res) {
 
     const parsed = PatchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid update data' });
-    const { status, payment_verified } = parsed.data;
-    if (status === undefined && payment_verified === undefined) {
+    const { status, payment_verified, no_show } = parsed.data;
+    if (status === undefined && payment_verified === undefined && no_show === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
+    }
+
+    // Marking a no-show also cancels the order — the trip is over either way,
+    // and leaving it open would keep it on tomorrow's delivery route.
+    if (no_show !== undefined) {
+      const { data: exists } = await supabase.from('orders').select('id').eq('id', id).single();
+      if (!exists) return res.status(404).json({ error: 'Order not found' });
+      const patch = no_show ? { no_show: true, status: 'cancelled' } : { no_show: false };
+      const { error: noShowErr } = await supabase.from('orders').update(patch).eq('id', id);
+      if (noShowErr) {
+        console.error('No-show update failed:', noShowErr);
+        return res.status(500).json({ error: 'Failed to update order' });
+      }
+      if (status === undefined && payment_verified === undefined) {
+        return res.status(200).json({ success: true });
+      }
     }
 
     if (payment_verified !== undefined) {

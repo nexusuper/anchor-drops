@@ -18,6 +18,8 @@ import { VOUCHER_VALUE } from '@/lib/loyalty';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
 const DELETABLE_STATUSES = ['delivered', 'cancelled'];
+// A no-show only makes sense for a trip that was still going to happen.
+const NO_SHOW_STATUSES = ['pending', 'confirmed', 'out_for_delivery'];
 
 const STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
@@ -263,6 +265,21 @@ export default function AdminPanel() {
     setUpdating(id);
     await withErrorBanner(async () => {
       await apiFetch('/api/orders/' + id, { method: 'PATCH', password: savedPassword, body: { status } });
+      await fetchOrders();
+    });
+    setUpdating(null);
+  }
+
+  // Rider went, nobody home. Cancels the order and records a strike against
+  // the phone (lib/order-guard.js): 2 strikes withdraw cash on delivery, 3 block
+  // online ordering. Confirmed first because it is visible to the customer.
+  async function markNoShow(order) {
+    if (!window.confirm(`Mark order ${order.order_number || ''} as NO SHOW?
+
+This cancels the order and counts a strike against ${order.phone}. After 2 strikes they lose cash on delivery; after 3 they cannot order online.`)) return;
+    setUpdating(order.id);
+    await withErrorBanner(async () => {
+      await apiFetch('/api/orders/' + order.id, { method: 'PATCH', password: savedPassword, body: { no_show: true } });
       await fetchOrders();
     });
     setUpdating(null);
@@ -767,6 +784,11 @@ export default function AdminPanel() {
                                   )}
                                 </>
                               )}
+                              {NO_SHOW_STATUSES.includes(o.status) && !o.no_show && (
+                                <button onClick={() => markNoShow(o)} disabled={updating === o.id} title="Mark as no show" aria-label="Mark as no show" className="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                                  <ClayIcon name="alert" className="w-4 h-4" />
+                                </button>
+                              )}
                               {DELETABLE_STATUSES.includes(o.status) && (
                                 <button onClick={() => setDeleteModal(o)} title="Delete order" aria-label="Delete order" className="text-xs bg-red-100 hover:bg-red-200 text-red-600 font-semibold px-2 py-1 rounded-full transition-colors">
                                   <ClayIcon name="trash" className="w-4 h-4" />
@@ -838,6 +860,11 @@ export default function AdminPanel() {
                         {NOTIFIABLE_STATUSES.includes(o.status) && (
                           <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" aria-label="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
                             {notifying === o.id ? '...' : <ClayIcon name="mobile" className="w-4 h-4" />}
+                          </button>
+                        )}
+                        {NO_SHOW_STATUSES.includes(o.status) && !o.no_show && (
+                          <button onClick={() => markNoShow(o)} disabled={updating === o.id} title="Mark as no show" aria-label="Mark as no show" className="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                            No show
                           </button>
                         )}
                         {DELETABLE_STATUSES.includes(o.status) && (

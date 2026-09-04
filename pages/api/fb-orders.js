@@ -3,6 +3,11 @@ import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { rateLimit } from '@/lib/rate-limit';
 import { timingSafeEqual } from '@/lib/auth';
 import { PRODUCTS_BY_ID } from '@/lib/products';
+import { matchBarangay } from '@/lib/service-area';
+import {
+  isValidPhonePH, isPlausibleAddress,
+  strikeVerdict, phoneVariants, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
+} from '@/lib/order-guard';
 import { z } from 'zod';
 
 const checkRate = rateLimit({ windowMs: 60_000, max: 10 });
@@ -58,11 +63,25 @@ export default async function handler(req, res) {
   const address = b.address || b.delivery_address || '';
   const gallons = parseGallons(b.qty ?? b.quantity ?? b.gallons);
   const messenger_psid = b.messenger_id || b.messenger_psid || b.psid || null;
-  const barangay = b.barangay || 'TBD (via Messenger)';
+  // Unlike the public form, an unrecognised barangay is NOT rejected here:
+  // chat intake frequently arrives without one, and the route already carries a
+  // "resolve this manually" sentinel for that case. A barangay that does match
+  // is canonicalised so the delivery route groups it with the web orders.
+  const barangay = matchBarangay(b.barangay) || 'TBD (via Messenger)';
   const productKey = PRODUCTS_BY_ID[b.product_type] ? b.product_type : 'slim5';
 
   if (!phone || !address || !gallons) {
     return res.status(400).json({ error: 'Missing required fields: need phone, address, and quantity' });
+  }
+
+  // Same junk filter as the public order form (lib/order-guard.js). The webhook
+  // secret proves the request came from ManyChat, not that a human on the other
+  // end typed a real phone number or address into the chat flow.
+  if (!isValidPhonePH(phone)) {
+    return res.status(400).json({ error: 'Please send a valid Philippine mobile number (09XXXXXXXXX).' });
+  }
+  if (!isPlausibleAddress(address)) {
+    return res.status(400).json({ error: 'Please send a complete delivery address.' });
   }
 
   const product = PRODUCTS_BY_ID[productKey];
@@ -73,6 +92,41 @@ export default async function handler(req, res) {
     (b.notes ? ` — ${b.notes}` : '');
 
   const supabase = getSupabase();
+  // Every stored spelling of this number — see phoneVariants() for why a single
+  // key is not enough.
+  const phoneKeys = phoneVariants(phone);
+
+  // Strike policy. Messenger orders are always COD, so a phone at
+  // STRIKES_PREPAY_ONLY is refused here and has to pay through the web form —
+  // which is the point: this is the channel ghost orders arrive on.
+  const { count: strikes, error: strikeErr } = await supabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .in('phone_normalized', phoneKeys)
+    .eq('no_show', true);
+  if (strikeErr) {
+    // Fail open, same as the public route: a lookup outage must not stop real orders.
+    console.error('FB order no-show strike lookup failed:', strikeErr);
+  } else {
+    const verdict = strikeVerdict(strikes || 0, 'cod');
+    if (!verdict.ok) return res.status(403).json({ error: verdict.error });
+  }
+
+  // Per-phone throttle for numbers that have never completed an order.
+  const { data: history, error: historyErr } = await supabase
+    .from('orders')
+    .select('status, created_at')
+    .in('phone_normalized', phoneKeys)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (!historyErr && history && history.length > 0 && !history.some((o) => o.status === 'delivered')) {
+    const since = Date.now() - NEW_PHONE_WINDOW_MS;
+    const recent = history.filter((o) => new Date(o.created_at).getTime() >= since).length;
+    if (recent >= NEW_PHONE_MAX_ORDERS) {
+      return res.status(429).json({ error: 'You already have several open orders. Please wait for them to be delivered first.' });
+    }
+  }
+
   const { data: order, error } = await supabase.rpc('create_order', {
     p_client_order_id: crypto.randomUUID(),
     p_branch_id: DEFAULT_BRANCH_ID,
