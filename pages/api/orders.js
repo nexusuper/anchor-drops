@@ -10,7 +10,7 @@ import { validateSchedule, manilaToday } from '@/lib/scheduling';
 import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleName, isPlausibleAddress,
-  strikeVerdict, phoneVariants, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
+  strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
 } from '@/lib/order-guard';
 import { z } from 'zod';
 
@@ -216,10 +216,11 @@ export default async function handler(req, res) {
       if (!trusted) {
         const since = Date.now() - NEW_PHONE_WINDOW_MS;
         const recent = history.filter((o) => new Date(o.created_at).getTime() >= since).length;
+        // Same status and message as the strike rejection above — see
+        // ORDER_REFUSED_MESSAGE. A distinct response here would disclose that
+        // an attacker-supplied number has open undelivered orders.
         if (recent >= NEW_PHONE_MAX_ORDERS) {
-          return res.status(429).json({
-            error: 'You already have several open orders. Please message us on Facebook to add more.',
-          });
+          return res.status(403).json({ error: ORDER_REFUSED_MESSAGE });
         }
       }
     }

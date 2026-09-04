@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   isValidPhonePH, isPlausibleName, isPlausibleAddress,
-  normalizePhonePH, strikeVerdict,
+  normalizePhonePH, strikeVerdict, ORDER_REFUSED_MESSAGE,
 } from '../lib/order-guard.js';
 import { matchBarangay, normalizeBarangay } from '../lib/service-area.js';
 
@@ -47,6 +47,10 @@ assert.equal(strikeVerdict(2, 'cod').ok, false, 'two strikes withdraws COD');
 assert.equal(strikeVerdict(2, 'gcash').ok, true, 'prepay still allowed at two strikes');
 assert.equal(strikeVerdict(3, 'gcash').ok, false, 'three strikes blocks entirely');
 assert.equal(strikeVerdict(9, 'cod').ok, false);
+// Every rejection reads identically, so the public endpoint cannot be used to
+// tell a blocked number from a prepay-only one.
+assert.equal(strikeVerdict(3, 'cod').error, ORDER_REFUSED_MESSAGE);
+assert.equal(strikeVerdict(2, 'cod').error, ORDER_REFUSED_MESSAGE);
 
 console.log('order-guard: all assertions passed');
 

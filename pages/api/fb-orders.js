@@ -6,7 +6,7 @@ import { PRODUCTS_BY_ID } from '@/lib/products';
 import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleAddress,
-  strikeVerdict, phoneVariants, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
+  strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
 } from '@/lib/order-guard';
 import { z } from 'zod';
 
@@ -123,7 +123,8 @@ export default async function handler(req, res) {
     const since = Date.now() - NEW_PHONE_WINDOW_MS;
     const recent = history.filter((o) => new Date(o.created_at).getTime() >= since).length;
     if (recent >= NEW_PHONE_MAX_ORDERS) {
-      return res.status(429).json({ error: 'You already have several open orders. Please wait for them to be delivered first.' });
+      // Same status and message as the strike rejection above — see ORDER_REFUSED_MESSAGE.
+      return res.status(403).json({ error: ORDER_REFUSED_MESSAGE });
     }
   }
 
