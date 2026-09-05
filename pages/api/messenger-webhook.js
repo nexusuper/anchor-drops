@@ -4,6 +4,7 @@ import { getSupabase } from '@/lib/supabaseAdmin';
 import { verifyWebhookSignature } from '@/lib/facebook';
 import { timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { ORDER_NUMBER_SEARCH_RE } from '@/lib/order-number';
 
 const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
 const checkRate = rateLimit({ windowMs: 60_000, max: 60 });
@@ -107,8 +108,8 @@ export default async function handler(req, res) {
         // `referral` fires for existing conversations; `postback.referral` rides GET_STARTED for new users.
         const ref = event.referral?.ref || event.postback?.referral?.ref;
         if (ref) {
-          const orderId = extractUuid(ref);
-          if (orderId) await linkOrderToPsid(senderPsid, orderId);
+          const orderRef = extractOrderRef(ref);
+          if (orderRef) await linkOrderToPsid(senderPsid, orderRef);
         }
       }
     }
@@ -122,28 +123,38 @@ export default async function handler(req, res) {
 
 const ORDER_ID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-function extractUuid(str) {
-  const m = String(str || '').match(ORDER_ID_RE);
-  return m ? m[0].toLowerCase() : null;
+// Pull an order reference out of free text. Both handles have to work here:
+// the confirmation page prints the customer-facing order number and puts THAT
+// in its m.me ?ref= deep link (pages/order/confirmation.js — `handle` prefers
+// order_number and only falls back to the uuid), so a uuid-only matcher meant
+// no inbound event ever bound a PSID and every reward code was undeliverable.
+// Returns { column, value } ready for a Supabase .eq(), or null.
+function extractOrderRef(str) {
+  const text = String(str || '');
+  const num = text.match(ORDER_NUMBER_SEARCH_RE);
+  if (num) return { column: 'order_number', value: num[0].toUpperCase() };
+  const uuid = text.match(ORDER_ID_RE);
+  if (uuid) return { column: 'id', value: uuid[0].toLowerCase() };
+  return null;
 }
 
 // Bind a customer's Messenger PSID to an order (and their customer record).
 // Shared by the typed-Order-ID path and the m.me?ref= deep-link path.
 // Returns true if a binding happened. Never throws to the caller.
-async function linkOrderToPsid(senderPsid, orderId) {
+async function linkOrderToPsid(senderPsid, ref) {
   const supabase = getSupabase();
   const { data: order } = await supabase
     .from('orders')
     .select('id, messenger_psid, status, created_at, customer_id')
-    .eq('id', orderId)
-    .single();
+    .eq(ref.column, ref.value)
+    .maybeSingle();
 
   // Only orders still in-flight and created recently can be linked — closes
   // the window where a stale/completed order ID (e.g. from an old screenshot)
   // could be used by a stranger to bind their Messenger to someone else's order.
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
   if (order && !order.messenger_psid && !['delivered', 'cancelled'].includes(order.status) && order.created_at > thirtyDaysAgo) {
-    await supabase.from('orders').update({ messenger_psid: senderPsid }).eq('id', orderId);
+    await supabase.from('orders').update({ messenger_psid: senderPsid }).eq('id', order.id);
     if (order.customer_id) {
       await supabase.from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
     }
@@ -156,12 +167,12 @@ async function linkOrderToPsid(senderPsid, orderId) {
 }
 
 async function handleMessage(senderPsid, messageText) {
-  const orderId = extractUuid(messageText);
-  if (orderId) {
-    const linked = await linkOrderToPsid(senderPsid, orderId);
+  const orderRef = extractOrderRef(messageText);
+  if (orderRef) {
+    const linked = await linkOrderToPsid(senderPsid, orderRef);
     if (!linked) {
       await sendReply(senderPsid,
-        `❌ Sorry, I couldn't find order #${orderId}.\n\n` +
+        `❌ Sorry, I couldn't find order #${orderRef.value}.\n\n` +
         `Please double-check the Order ID from your confirmation page and try again.`
       );
     }

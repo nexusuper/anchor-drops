@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { ORDER_NUMBER_RE } from '../lib/order-number.js';
+import { ORDER_NUMBER_RE, ORDER_NUMBER_SEARCH_RE } from '../lib/order-number.js';
 
 // The generator's alphabet is 32 characters. Counting it here rather than
 // trusting the migration comment, because the whole bug was an off-by-one
@@ -45,5 +45,20 @@ for (const bad of [
 ]) {
   assert.equal(ORDER_NUMBER_RE.test(bad), false, `must reject ${JSON.stringify(bad)}`);
 }
+
+// The Messenger webhook pulls an order handle out of free text (a typed
+// message, an m.me ?ref= payload). It only recognised uuids for a while, so no
+// inbound event ever bound a PSID and every loyalty reward code was
+// undeliverable — the confirmation page ships the ORDER NUMBER in that link.
+for (const text of [
+  'ADW-CDO-260905-QJN9-0001',
+  'hi my order is ADW-CDO-260905-QJN9-0001 thanks',
+  'CFW-CDO-251201-AB-12',
+]) {
+  const m = text.match(ORDER_NUMBER_SEARCH_RE);
+  assert.ok(m, `must find an order number in ${JSON.stringify(text)}`);
+  assert.ok(ORDER_NUMBER_RE.test(m[0]), `extracted ${m[0]} must be a valid order number`);
+}
+assert.equal(ORDER_NUMBER_SEARCH_RE.test('just a normal hello'), false);
 
 console.log('order-number.test.mjs: all assertions passed');
