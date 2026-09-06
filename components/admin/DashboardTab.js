@@ -96,6 +96,74 @@ export default function DashboardTab({ savedPassword }) {
             })()}
           </div>
 
+          {dashboard.traffic && (
+            <div className="clay-raised rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-clay-ink">Website traffic — last 30 days</p>
+                <p className="text-xs text-clay-ink/50">{dashboard.traffic.visitors30d} visitors</p>
+              </div>
+              {dashboard.traffic.visitorSeries.length === 0 ? (
+                <p className="text-sm text-clay-ink/50 py-4 text-center">No visits yet</p>
+              ) : (
+                <>
+                  {(() => {
+                    const max = Math.max(1, ...dashboard.traffic.visitorSeries.map((d) => d.visitors));
+                    return (
+                      <div className="flex items-end gap-[2px] h-24 mb-4">
+                        {dashboard.traffic.visitorSeries.map((d) => (
+                          <div
+                            key={d.date}
+                            title={`${d.date}: ${d.visitors} visitors`}
+                            className="flex-1 bg-emerald-400 hover:bg-emerald-500 rounded-t transition-colors"
+                            style={{ height: `${Math.max(2, (d.visitors / max) * 100)}%` }}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs font-semibold text-clay-ink/60 mb-1.5">Where they checked</p>
+                      <ul className="space-y-1">
+                        {dashboard.traffic.topPages.map((p) => (
+                          <li key={p.path} className="flex justify-between text-xs gap-2">
+                            <span className="text-clay-ink/80 truncate">{p.path}</span>
+                            <span className="font-semibold text-sky-700 shrink-0">{p.count}</span>
+                          </li>
+                        ))}
+                        {dashboard.traffic.topPages.length === 0 && <li className="text-xs text-clay-ink/50">No data</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-clay-ink/60 mb-1.5">What they clicked</p>
+                      <ul className="space-y-1">
+                        {dashboard.traffic.topClicks.map((c) => (
+                          <li key={c.target} className="flex justify-between text-xs gap-2">
+                            <span className="text-clay-ink/80 truncate">{c.target}</span>
+                            <span className="font-semibold text-sky-700 shrink-0">{c.count}</span>
+                          </li>
+                        ))}
+                        {dashboard.traffic.topClicks.length === 0 && <li className="text-xs text-clay-ink/50">No data</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-clay-ink/60 mb-1.5">Where they came from</p>
+                      <ul className="space-y-1">
+                        {dashboard.traffic.topReferrers.map((r) => (
+                          <li key={r.host} className="flex justify-between text-xs gap-2">
+                            <span className="text-clay-ink/80 truncate">{r.host}</span>
+                            <span className="font-semibold text-sky-700 shrink-0">{r.count}</span>
+                          </li>
+                        ))}
+                        {dashboard.traffic.topReferrers.length === 0 && <li className="text-xs text-clay-ink/50">Direct only</li>}
+                      </ul>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="clay-raised rounded-2xl p-4">
               <p className="text-sm font-semibold text-clay-ink mb-3">Top barangays</p>
