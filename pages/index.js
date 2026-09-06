@@ -5,6 +5,7 @@ import VideoShowcase from '@/components/VideoShowcase';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
+import { useEffect, useState } from 'react';
 import { FB_PAGE_ID } from '@/pages/_app';
 import { PRODUCTS } from '@/lib/products';
 
@@ -43,6 +44,16 @@ function Jug() {
 }
 
 export default function Home() {
+  // null = status check hasn't landed yet — show everything rather than flash-hide.
+  const [activeSkus, setActiveSkus] = useState(null);
+  useEffect(() => {
+    fetch('/api/ordering-status')
+      .then((r) => r.json())
+      .then((d) => setActiveSkus(d.activeSkus ?? null))
+      .catch(() => {});
+  }, []);
+  const visibleProducts = activeSkus ? PRODUCTS.filter((p) => activeSkus.includes(p.id)) : PRODUCTS;
+
   return (
     <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded">
       <AnimatedHero />
@@ -125,8 +136,8 @@ export default function Home() {
             Affordable, premium water.
           </h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 max-w-2xl mx-auto gap-6 mb-8">
-          {PRODUCTS.map((p, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto gap-6 mb-8">
+          {visibleProducts.map((p, i) => (
             <ClayCard key={p.id} className={`p-7 text-center reveal reveal-d${i}`}>
               <span className="inline-block text-xs font-extrabold text-white rounded-full px-3 py-1 mb-4 clay-btn-primary">
                 {p.tag}
