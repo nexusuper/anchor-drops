@@ -212,7 +212,7 @@ function ProductsSection({ products, canEdit, onSaved }) {
         <div key={p.sku} className="flex items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-clay-ink">{p.name}</div>
-            <div className="text-xs text-clay-ink/50">₱{p.refill_price} refill · ₱{p.container_price} container+refill</div>
+            <div className="text-xs text-clay-ink/50">₱{p.refill_price} refill · ₱{Number(p.refill_price) + Number(p.container_price)} container+refill</div>
           </div>
           {canEdit && (
             <ClayButton

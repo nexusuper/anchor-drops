@@ -46,7 +46,7 @@ export default function Products() {
                 </div>
                 <div className="flex justify-between items-center clay-inset rounded-xl px-4 py-2.5">
                   <span className="text-clay-muted text-sm font-semibold">Container + refill</span>
-                  <span className="font-editorial text-clay-skydeep font-bold text-lg">₱{p.container}</span>
+                  <span className="font-editorial text-clay-skydeep font-bold text-lg">₱{p.refill + p.container}</span>
                 </div>
               </div>
               <ClayButton href={`/order?product=${p.id}`} className="mt-auto w-full">Order Now</ClayButton>
