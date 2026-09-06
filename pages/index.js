@@ -3,6 +3,7 @@ import AnimatedHero from '@/components/AnimatedHero';
 import PurifyProcess from '@/components/PurifyProcess';
 import VideoShowcase from '@/components/VideoShowcase';
 import Testimonials from '@/components/Testimonials';
+import StandingOrderPitch from '@/components/StandingOrderPitch';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
@@ -145,6 +146,8 @@ export default function Home() {
           <ClayButton href="/products" variant="outline">View All Products &amp; Pricing →</ClayButton>
         </div>
       </section>
+
+      <StandingOrderPitch />
 
       <Testimonials />
 
