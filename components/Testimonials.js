@@ -1,31 +1,6 @@
 import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
-
-// PLACEHOLDER CONTENT — replace every entry with a real customer's name,
-// barangay, and actual words before this ships. A fabricated testimonial is
-// worse than none: no proof of trust today, but a screenshot of a made-up
-// person tomorrow if anyone checks. Swap `name`/`area`/`quote` per entry;
-// keep the shape the same.
-const TESTIMONIALS = [
-  {
-    name: 'Add a real customer name',
-    area: 'Barangay, CDO',
-    quote: 'Replace with an actual quote from a real order — copy it verbatim from a Messenger review, Facebook comment, or ask a regular customer directly.',
-    rating: 5,
-  },
-  {
-    name: 'Add a real customer name',
-    area: 'Barangay, CDO',
-    quote: 'Replace with an actual quote from a real order — copy it verbatim from a Messenger review, Facebook comment, or ask a regular customer directly.',
-    rating: 5,
-  },
-  {
-    name: 'Add a real customer name',
-    area: 'Barangay, CDO',
-    quote: 'Replace with an actual quote from a real order — copy it verbatim from a Messenger review, Facebook comment, or ask a regular customer directly.',
-    rating: 5,
-  },
-];
+import { TESTIMONIALS } from '@/lib/testimonials';
 
 function Stars({ count }) {
   return (

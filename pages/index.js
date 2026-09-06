@@ -8,6 +8,7 @@ import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { FB_PAGE_ID } from '@/pages/_app';
 import { PRODUCTS } from '@/lib/products';
+import { TESTIMONIALS, testimonialsSchema } from '@/lib/testimonials';
 
 const features = [
   {
@@ -46,7 +47,7 @@ function Jug() {
 
 export default function Home() {
   return (
-    <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded">
+    <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded" schemaExtra={testimonialsSchema(TESTIMONIALS)}>
       <AnimatedHero />
 
       {/* Trust badges */}
