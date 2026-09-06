@@ -6,18 +6,7 @@ import ClayIcon from '@/components/ui/ClayIcon';
 import { useOpsSession } from '@/lib/useOpsSession';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
-const DELIVERY_RULES = [
-  { min: 3, fee: 0, label: '3+ containers', feeLabel: 'FREE' },
-  { min: 2, fee: 15, label: '2 containers', feeLabel: '₱15' },
-  { min: 1, fee: 20, label: '1 container', feeLabel: '₱20' },
-];
-
 const DEFAULT_LOYALTY = { gallonsPerVoucher: 10, voucherValue: 20, gallonsBySize: {} };
-
-function deliveryTiersFromSettings(settings) {
-  const row = settings?.find((s) => s.key === 'delivery_fee_tiers');
-  return Array.isArray(row?.value) ? row.value : DELIVERY_RULES;
-}
 
 function loyaltySettingsFromSettings(settings) {
   const row = settings?.find((s) => s.key === 'loyalty');
@@ -30,8 +19,8 @@ function loyaltySettingsFromSettings(settings) {
   };
 }
 
-// Money-relevant (server RPCs read app_settings.delivery_fee_tiers /
-// voucher_value) — validate carefully, never save a malformed shape.
+// Money-relevant (server RPCs read app_settings.voucher_value) — validate
+// carefully, never save a malformed shape.
 function parsePositiveNumber(text) {
   const n = Number(text);
   if (text.trim() === '' || !Number.isFinite(n) || n < 0) return null;
@@ -50,13 +39,18 @@ function SettingsContent() {
   const { role } = useOpsSession();
   const canEdit = role === 'owner' || role === 'admin';
   const [settings, setSettings] = useState(null);
+  const [products, setProducts] = useState(null);
   const [loading, setLoading] = useState(true);
 
   async function reload() {
     setLoading(true);
     const supabase = getSupabaseBrowser();
-    const { data, error } = await supabase.from('app_settings').select('*');
-    if (!error) setSettings(data);
+    const [{ data: settingsData, error }, { data: productsData, error: productsErr }] = await Promise.all([
+      supabase.from('app_settings').select('*'),
+      supabase.from('products').select('*').order('sort_order'),
+    ]);
+    if (!error) setSettings(settingsData);
+    if (!productsErr) setProducts(productsData);
     setLoading(false);
   }
 
@@ -67,8 +61,9 @@ function SettingsContent() {
   return (
     <div className="space-y-4 max-w-xl">
       {!canEdit && <p className="text-sm text-clay-ink/50">Read-only — only owner/admin can edit settings.</p>}
+      <OrderingSection settings={settings} canEdit={canEdit} onSaved={reload} />
+      <ProductsSection products={products} canEdit={canEdit} onSaved={reload} />
       <LoyaltySection key={JSON.stringify(loyaltySettingsFromSettings(settings))} settings={settings} canEdit={canEdit} onSaved={reload} />
-      <DeliveryTiersSection key={JSON.stringify(deliveryTiersFromSettings(settings))} settings={settings} canEdit={canEdit} onSaved={reload} />
     </div>
   );
 }
@@ -95,6 +90,43 @@ async function saveSetting(key, value) {
     .select('key');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error(`Setting "${key}" was not saved (permission denied).`);
+}
+
+function OrderingSection({ settings, canEdit, onSaved }) {
+  const row = settings?.find((s) => s.key === 'ordering_enabled');
+  const enabled = row ? row.value === true : true;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function toggle() {
+    setError(null);
+    setSaving(true);
+    try {
+      await saveSetting('ordering_enabled', !enabled);
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ClayCard className="p-4 space-y-3">
+      <SectionHeader icon="truck" title="Online Ordering" />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-clay-ink/80">
+          Public order form is <b className={enabled ? 'text-green-600' : 'text-clay-danger'}>{enabled ? 'OPEN' : 'CLOSED (Opening Soon)'}</b>
+        </span>
+        {canEdit && (
+          <ClayButton size="sm" variant={enabled ? 'outline' : 'primary'} onClick={toggle} loading={saving}>
+            {enabled ? 'Close Ordering' : 'Open Ordering'}
+          </ClayButton>
+        )}
+      </div>
+      {error && <p className="text-sm text-clay-danger">{error}</p>}
+    </ClayCard>
+  );
 }
 
 function LoyaltySection({ settings, canEdit, onSaved }) {
@@ -150,51 +182,51 @@ function LoyaltySection({ settings, canEdit, onSaved }) {
   );
 }
 
-function DeliveryTiersSection({ settings, canEdit, onSaved }) {
-  const tiers = deliveryTiersFromSettings(settings);
-  const [fees, setFees] = useState(tiers.map((t) => String(t.fee)));
+// Generic on/off switch for any row in the `products` table — this is what
+// the site's public product list (lib/products.js, filtered by /api/ordering-status)
+// actually checks, so flipping a row here hides/shows it everywhere at once.
+function ProductsSection({ products, canEdit, onSaved }) {
+  const [pendingSku, setPendingSku] = useState(null);
   const [error, setError] = useState(null);
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
 
-  async function handleSave() {
-    setError(null); setSaved(false);
-    const parsedFees = fees.map(parsePositiveNumber);
-    if (parsedFees.some((f) => f === null)) {
-      setError('Every fee must be a valid non-negative number.');
-      return;
-    }
-    const nextTiers = tiers.map((tier, i) => ({ ...tier, fee: parsedFees[i] }));
-    setSaving(true);
+  async function toggleProduct(sku, nextActive) {
+    setError(null);
+    setPendingSku(sku);
     try {
-      await saveSetting('delivery_fee_tiers', nextTiers);
-      setSaved(true);
+      const supabase = getSupabaseBrowser();
+      const { data, error: err } = await supabase.from('products').update({ is_active: nextActive }).eq('sku', sku).select('sku');
+      if (err) throw err;
+      if (!data || data.length === 0) throw new Error(`Product "${sku}" was not updated (permission denied).`);
       onSaved();
     } catch (e) {
       setError(e.message);
     } finally {
-      setSaving(false);
+      setPendingSku(null);
     }
   }
 
   return (
     <ClayCard className="p-4 space-y-3">
-      <SectionHeader icon="cash" title="Delivery Fee Tiers" />
-      {tiers.map((tier, i) => (
-        <div key={tier.label} className="flex items-center justify-between gap-3">
-          <span className="text-sm text-clay-ink/80 flex-1">{tier.label}</span>
-          <input
-            className="clay-inset rounded-xl px-3 py-2 text-sm text-right w-28"
-            disabled={!canEdit}
-            value={fees[i]}
-            onChange={(e) => setFees((prev) => prev.map((f, idx) => (idx === i ? e.target.value : f)))}
-            inputMode="decimal"
-          />
+      <SectionHeader icon="box" title="Products" />
+      {(products || []).map((p) => (
+        <div key={p.sku} className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-clay-ink">{p.name}</div>
+            <div className="text-xs text-clay-ink/50">₱{p.refill_price} refill · ₱{p.container_price} container+refill</div>
+          </div>
+          {canEdit && (
+            <ClayButton
+              size="sm"
+              variant={p.is_active ? 'outline' : 'primary'}
+              onClick={() => toggleProduct(p.sku, !p.is_active)}
+              loading={pendingSku === p.sku}
+            >
+              {p.is_active ? 'Turn Off' : 'Turn On'}
+            </ClayButton>
+          )}
         </div>
       ))}
       {error && <p className="text-sm text-clay-danger">{error}</p>}
-      {saved && <p className="text-sm text-green-600">Saved.</p>}
-      {canEdit && <ClayButton size="sm" onClick={handleSave} loading={saving}>Save Delivery Tiers</ClayButton>}
     </ClayCard>
   );
 }

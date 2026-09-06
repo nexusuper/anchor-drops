@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import ClayIcon from '../ui/ClayIcon';
 import Receipt from './Receipt';
-import { PRODUCTS, PRODUCTS_BY_ID, deliveryFee } from '@/lib/products';
+import { PRODUCTS, PRODUCTS_BY_ID } from '@/lib/products';
 
 const PAYMENT_METHODS = [
   { id: 'cod', label: 'Cash' },
@@ -75,7 +75,7 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
 
   const cartSubtotal = lines.reduce((sum, l) => sum + lineSubtotal(l), 0);
   const totalQuantity = lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0);
-  const estDeliveryFee = fulfillment === 'pickup' ? 0 : deliveryFee(totalQuantity);
+  const estDeliveryFee = 0; // delivery fee retired — pricing is all-in on the product price now
   const availableVouchers = loyalty?.available || 0;
   const clampedRedeem = Math.max(0, Math.min(Number(redeemVouchers) || 0, availableVouchers, totalQuantity));
   const estVoucherDiscount = clampedRedeem * 30;

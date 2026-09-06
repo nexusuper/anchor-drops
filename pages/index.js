@@ -27,7 +27,6 @@ const features = [
 ];
 
 const stats = [
-  { num: '500+', label: 'Happy Households' },
   { num: 'Same Day', label: 'Delivery Available' },
   { num: 'Free', label: 'Refill Vouchers' },
 ];

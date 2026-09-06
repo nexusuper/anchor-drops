@@ -5,7 +5,7 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import LocationPicker from '@/components/order/LocationPicker';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
-import { PRODUCTS, deliveryFee, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY } from '@/lib/products';
+import { PRODUCTS, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY } from '@/lib/products';
 import {
   classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday,
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
@@ -50,7 +50,7 @@ const EMPTY_FORM = {
   barangay: '',
   lat: null,
   lng: null,
-  product_type: 'slim5',
+  product_type: 'round5_pickup',
   quantity: 1,
   need_container: false,
   container_quantity: 1,
@@ -67,8 +67,45 @@ const EMPTY_FORM = {
 };
 
 export default function Order() {
+  // Admin-controlled kill switch (app_settings.ordering_enabled + products.is_active)
+  // — defaults open until checked, so a slow/failed fetch never blocks a real customer.
+  const [siteStatus, setSiteStatus] = useState(null);
+  useEffect(() => {
+    fetch('/api/ordering-status')
+      .then((r) => r.json())
+      .then(setSiteStatus)
+      .catch(() => setSiteStatus({ enabled: true, activeSkus: null }));
+  }, []);
+
+  // Hooks below must run every render, so the opening-soon gate lives in a
+  // separate component rather than an early return in this one.
+  if (siteStatus && siteStatus.enabled === false) {
+    return (
+      <Layout title="Opening Soon — Anchor Drops">
+        <section className="max-w-2xl mx-auto px-4 py-24 text-center reveal">
+          <span className="section-pill mb-5 inline-block">Opening Soon</span>
+          <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
+            Online Ordering <span style={{ color: '#0ea5e9' }}>Opening Soon.</span>
+          </h1>
+          <p className="text-clay-muted font-semibold mt-3 text-base">
+            We&apos;re not open for orders yet — check back soon.
+          </p>
+          <a href={`tel:${BUSINESS_PHONE_TEL}`} className="mt-6 inline-flex items-center gap-2 clay-raised-sm rounded-full px-4 py-2.5 text-base font-semibold text-clay-skydeep clay-pressable">
+            <ClayIcon name="phone" className="w-5 h-5" /> Call us: {BUSINESS_PHONE_DISPLAY}
+          </a>
+        </section>
+      </Layout>
+    );
+  }
+
+  return <OrderForm activeSkus={siteStatus?.activeSkus ?? null} />;
+}
+
+function OrderForm({ activeSkus }) {
   const router = useRouter();
   const { product: queryProduct } = router.query;
+  // null activeSkus = status check hasn't landed yet (or failed) — show everything.
+  const availableProducts = activeSkus ? PRODUCTS.filter((p) => activeSkus.includes(p.id)) : PRODUCTS;
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [restoredIdentity, setRestoredIdentity] = useState(false);
@@ -97,6 +134,15 @@ export default function Order() {
   useEffect(() => {
     if (queryProduct) queueMicrotask(() => setForm((f) => ({ ...f, product_type: queryProduct })));
   }, [queryProduct]);
+
+  // If the selected product gets deactivated from under the form (admin flips it
+  // off mid-visit), fall back to whatever's still available instead of submitting
+  // a dead sku.
+  useEffect(() => {
+    if (availableProducts.length && !availableProducts.some((p) => p.id === form.product_type)) {
+      queueMicrotask(() => setForm((f) => ({ ...f, product_type: availableProducts[0].id })));
+    }
+  }, [availableProducts]);
 
   // Restore on mount (not in a useState initialiser — the page is server-rendered
   // and reading storage during render would break hydration).
@@ -161,11 +207,10 @@ export default function Order() {
     return () => clearTimeout(t);
   }, [form.phone]);
 
-  const selectedProduct = PRODUCTS.find((p) => p.id === form.product_type) || PRODUCTS[0];
+  const selectedProduct = availableProducts.find((p) => p.id === form.product_type) || availableProducts[0] || PRODUCTS[0];
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
-  const delivery = deliveryFee(form.quantity);
-  const baseTotal = refillTotal + containerTotal + delivery;
+  const baseTotal = refillTotal + containerTotal;
   const maxVouchers = maxRedeemable({
     available: rewards ? rewards.available : 0,
     quantity: form.quantity,
@@ -470,7 +515,7 @@ export default function Order() {
               <div>
                 <label className="block text-sm font-medium text-clay-ink2 mb-2">Product *</label>
                 <div className="grid grid-cols-1 gap-2">
-                  {PRODUCTS.map((p) => (
+                  {availableProducts.map((p) => (
                     <label key={p.id} className={`flex items-center justify-between rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.product_type === p.id ? 'clay-tile-selected' : ''}`}>
                       <div className="flex items-center gap-3">
                         <input type="radio" name="product_type" value={p.id} checked={form.product_type === p.id} onChange={() => set('product_type', p.id)} className="accent-clay-sky" />
@@ -711,10 +756,6 @@ export default function Order() {
                   <span className="font-medium">₱{containerTotal}</span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="text-clay-muted">🚚 Delivery Fee <span className="text-xs">(within service area)</span></span>
-                <span className="font-medium">{delivery === 0 ? 'FREE' : `₱${delivery}`}</span>
-              </div>
               {voucherDiscount > 0 && (
                 <div className="flex justify-between text-clay-skydeep font-semibold">
                   <span>Free refill reward ×{rewardCount}</span>

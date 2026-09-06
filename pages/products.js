@@ -3,8 +3,8 @@ import PurifyProcess from '@/components/PurifyProcess';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
-import { PRODUCTS, DELIVERY_RULES } from '@/lib/products';
-import { STORE_HOURS_LABEL } from '@/lib/scheduling';
+import { useEffect, useState } from 'react';
+import { PRODUCTS } from '@/lib/products';
 
 const payments = [
   { icon: 'cash', name: 'Cash on Delivery', desc: 'Pay when your water arrives.' },
@@ -13,6 +13,16 @@ const payments = [
 ];
 
 export default function Products() {
+  // null = status check hasn't landed yet — show everything rather than flash-hide.
+  const [activeSkus, setActiveSkus] = useState(null);
+  useEffect(() => {
+    fetch('/api/ordering-status')
+      .then((r) => r.json())
+      .then((d) => setActiveSkus(d.activeSkus ?? null))
+      .catch(() => {});
+  }, []);
+  const visibleProducts = activeSkus ? PRODUCTS.filter((p) => activeSkus.includes(p.id)) : PRODUCTS;
+
   return (
     <Layout title="Products & Pricing — Anchor Drops">
       <section className="max-w-6xl mx-auto px-4 pt-14 pb-6 reveal">
@@ -24,7 +34,7 @@ export default function Products() {
 
       <section className="max-w-6xl mx-auto px-4 py-14 reveal">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {PRODUCTS.map((p) => (
+          {visibleProducts.map((p) => (
             <ClayCard key={p.id} className="p-7 flex flex-col">
               <span className="self-center text-xs font-extrabold text-white rounded-full px-4 py-1.5 mb-4 clay-btn-primary">{p.tag}</span>
               <h2 className="text-xl font-editorial font-semibold text-clay-ink text-center mb-1">{p.name}</h2>
@@ -46,29 +56,6 @@ export default function Products() {
       </section>
 
       <PurifyProcess />
-
-      <section className="max-w-2xl mx-auto px-4 py-12">
-        <h2 className="font-editorial text-2xl font-bold text-clay-ink text-center mb-6">Delivery Fees</h2>
-        <ClayCard className="overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="clay-inset">
-              <tr>
-                <th className="text-left px-5 py-3 text-clay-ink2 font-editorial">Order Size</th>
-                <th className="text-right px-5 py-3 text-clay-ink2 font-editorial">Delivery Fee</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DELIVERY_RULES.map((r, i) => (
-                <tr key={i}>
-                  <td className="px-5 py-3 text-clay-ink font-semibold">{r.label}</td>
-                  <td className="px-5 py-3 text-right font-editorial font-bold text-clay-skydeep">{r.feeLabel}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ClayCard>
-        <p className="text-clay-muted text-xs text-center mt-3">Delivery available {STORE_HOURS_LABEL}, within service area.</p>
-      </section>
 
       <section className="max-w-4xl mx-auto px-4 py-12">
         <h2 className="font-editorial text-2xl font-bold text-clay-ink text-center mb-6">Accepted Payments</h2>
