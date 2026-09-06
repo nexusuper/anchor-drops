@@ -2,8 +2,50 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import Head from 'next/head';
 import { canonicalFor } from '@/lib/seo';
+import { BUSINESS_PHONE_TEL, STORE_ADDRESS_DISPLAY, STORE_LAT, STORE_LNG, PRODUCTS } from '@/lib/products';
+import { STORE_HOURS_LABEL } from '@/lib/scheduling';
 
 const DESCRIPTION = 'Order fresh purified water refills delivered to your door. No login required.';
+
+// LocalBusiness JSON-LD — same on every page on purpose. Google dedupes
+// identical structured data across a site's pages; what matters is that it's
+// present and consistent, not page-specific.
+const LOCAL_BUSINESS_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'LocalBusiness',
+  name: 'Anchor Drops',
+  image: canonicalFor('/og-image.png'),
+  url: canonicalFor('/'),
+  telephone: BUSINESS_PHONE_TEL,
+  priceRange: `₱${Math.min(...PRODUCTS.map((p) => p.refill))}-₱${Math.max(...PRODUCTS.map((p) => p.refill))}`,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: STORE_ADDRESS_DISPLAY,
+    addressLocality: 'Cagayan de Oro',
+    addressRegion: 'Misamis Oriental',
+    addressCountry: 'PH',
+  },
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: STORE_LAT,
+    longitude: STORE_LNG,
+  },
+  // Mon-Sat, 8:00-12:00 and 13:00-17:00 — kept in sync with lib/scheduling.js.
+  openingHoursSpecification: [
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      opens: '08:00',
+      closes: '12:00',
+    },
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      opens: '13:00',
+      closes: '17:00',
+    },
+  ],
+};
 
 export default function Layout({ children, title = 'Anchor Drops — Pure Water Delivery' }) {
   return (
@@ -23,6 +65,10 @@ export default function Layout({ children, title = 'Anchor Drops — Pure Water 
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={DESCRIPTION} />
         <meta name="twitter:image" content={canonicalFor('/og-image.png')} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(LOCAL_BUSINESS_SCHEMA) }}
+        />
       </Head>
       <div className="min-h-screen flex flex-col bg-clay-bg">
         <a href="#main" className="skip-link">Skip to content</a>
