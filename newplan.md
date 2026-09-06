@@ -54,7 +54,7 @@ Root cause: no easy path for a customer to link Messenger. Fix the funnel, not j
 - `order.js`: in the reward fallback UI, when `reason === 'not_linked'`, show a one-line hint that they can link Messenger after placing the order (or just apply on delivery). No new binding flow here — the real binding moment is the confirmation page (no order id exists yet mid-checkout).
 
 **Setup + test checklist (delivered as a doc, since FB is "partially set up")**
-Verify in Vercel env: `FB_PAGE_ACCESS_TOKEN`, `FB_APP_SECRET`, `FB_VERIFY_TOKEN`, `REWARD_CODE_SECRET`, `NEXT_PUBLIC_FB_PAGE_ID`. In Meta Developer console: webhook callback URL = `https://clear-flow-nine.vercel.app/api/messenger-webhook`, verify token matches `FB_VERIFY_TOKEN`, subscribe the Page to `messages`, `messaging_postbacks`, `messaging_referrals`. Set up the Get Started button. Test: place a real order → tap the Messenger link on confirmation → confirm the "order linked" reply → check rewards code send.
+Verify in Vercel env: `FB_PAGE_ACCESS_TOKEN`, `FB_APP_SECRET`, `FB_VERIFY_TOKEN`, `REWARD_CODE_SECRET`, `NEXT_PUBLIC_FB_PAGE_ID`. In Meta Developer console: webhook callback URL = `https://www.anchordropscdo.com/api/messenger-webhook`, verify token matches `FB_VERIFY_TOKEN`, subscribe the Page to `messages`, `messaging_postbacks`, `messaging_referrals`. Set up the Get Started button. Test: place a real order → tap the Messenger link on confirmation → confirm the "order linked" reply → check rewards code send.
 
 ## 3. Admin stays logged in
 

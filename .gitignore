@@ -67,3 +67,6 @@ next-env.d.ts
 
 # playwright-mcp session logs/snapshots
 /.playwright-mcp/
+
+.env*
+.vercel
