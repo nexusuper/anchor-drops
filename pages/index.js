@@ -53,14 +53,18 @@ export default function Home() {
     <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded">
       <AnimatedHero />
 
-      {/* Trust badges */}
-      <section className="max-w-6xl mx-auto px-4 pb-8">
-        <div className="reveal flex flex-wrap justify-center gap-x-6 gap-y-2">
-          {['DTI Registered', 'Bacteriological / Water Quality Tested', 'Sanitary Permit & Compliance', 'Same Day Delivery', 'Cash on Delivery'].map((t) => (
-            <span key={t} className="inline-flex items-center gap-1.5 text-sm font-bold text-clay-ink2">
-              <ClayIcon name="check" className="w-4 h-4 text-clay-skydeep" /> {t}
-            </span>
-          ))}
+      {/* Stats highlights */}
+      <section className="max-w-6xl mx-auto px-4 pb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
+          <ClayCard className="reveal p-10 text-center clay-raised">
+            <div className="font-editorial text-3xl font-bold text-clay-sky mb-2">Same</div>
+            <div className="font-editorial text-3xl font-bold text-clay-sky mb-1">Day</div>
+            <div className="text-sm font-bold text-clay-muted uppercase tracking-wide">Delivery Available</div>
+          </ClayCard>
+          <ClayCard className="reveal reveal-d1 p-10 text-center clay-raised">
+            <div className="font-editorial text-3xl font-bold text-clay-sky mb-2">Free</div>
+            <div className="text-sm font-bold text-clay-muted uppercase tracking-wide">Refill Vouchers</div>
+          </ClayCard>
         </div>
       </section>
 
