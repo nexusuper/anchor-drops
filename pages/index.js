@@ -27,11 +27,6 @@ const features = [
   },
 ];
 
-const stats = [
-  { num: 'Same Day', label: 'Delivery Available' },
-  { num: 'Free', label: 'Refill Vouchers' },
-];
-
 function Jug() {
   return (
     <svg className="mx-auto" width="80" height="100" viewBox="0 0 60 78" aria-hidden="true">
@@ -65,18 +60,6 @@ export default function Home() {
             <span key={t} className="inline-flex items-center gap-1.5 text-sm font-bold text-clay-ink2">
               <ClayIcon name="check" className="w-4 h-4 text-clay-skydeep" /> {t}
             </span>
-          ))}
-        </div>
-      </section>
-
-      {/* Stats bar */}
-      <section className="max-w-6xl mx-auto px-4 pb-12">
-        <div className="reveal clay-raised rounded-2xl px-2 sm:px-6 py-5 grid grid-cols-3 divide-x divide-sky-100">
-          {stats.map((s) => (
-            <div key={s.label} className="text-center px-1 sm:px-4 py-1">
-              <div className="font-editorial font-bold text-2xl md:text-3xl text-clay-skydeep">{s.num}</div>
-              <div className="text-xs font-bold text-clay-muted mt-0.5 tracking-wide uppercase">{s.label}</div>
-            </div>
           ))}
         </div>
       </section>
