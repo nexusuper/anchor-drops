@@ -8,6 +8,7 @@ import CustomersTab from './admin/CustomersTab';
 import LoyaltyTab from './admin/LoyaltyTab';
 import RouteTab from './admin/RouteTab';
 import InventoryTab from './admin/InventoryTab';
+import ProductsTab from './admin/ProductsTab';
 import ScreenshotsTab from './admin/ScreenshotsTab';
 import ExpensesTab from './admin/ExpensesTab';
 import Receipt, { orderToReceipt } from './admin/Receipt';
@@ -418,7 +419,7 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
             <div>
               <h1 className="text-xl font-bold">Anchor Drops — Admin</h1>
               <p className="text-sky-200 text-sm">
-                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? "Today's deliveries" : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? 'Payment screenshots' : activeTab === 'loyalty' ? 'Order-count voucher tracker' : activeTab === 'pickups' ? 'Container pickups' : activeTab === 'expenses' ? 'Business expenses' : 'Business overview'}
+                {activeTab === 'orders' ? `${totalOrders} total orders` : activeTab === 'customers' ? `${custTotal} customers` : activeTab === 'route' ? "Today's deliveries" : activeTab === 'inventory' ? 'Stock levels' : activeTab === 'products' ? 'Available on storefront' : activeTab === 'pos' ? 'Quick order entry' : activeTab === 'screenshots' ? 'Payment screenshots' : activeTab === 'loyalty' ? 'Order-count voucher tracker' : activeTab === 'pickups' ? 'Container pickups' : activeTab === 'expenses' ? 'Business expenses' : 'Business overview'}
               </p>
             </div>
             <div className="flex gap-3">
@@ -474,6 +475,12 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
               {lowStockCount > 0 && (
                 <span className="ml-1.5 inline-flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full w-4 h-4">{lowStockCount}</span>
               )}
+            </button>
+            <button
+              onClick={() => setActiveTab('products')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'products' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="box" className="w-4 h-4 inline mr-1" /> Products
             </button>
             <button
               onClick={() => setActiveTab('pos')}
@@ -916,6 +923,9 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
 
           {/* ===== INVENTORY TAB ===== */}
           {activeTab === 'inventory' && <InventoryTab savedPassword={savedPassword} onLowStockCount={setLowStockCount} />}
+
+          {/* ===== PRODUCTS TAB ===== */}
+          {activeTab === 'products' && <ProductsTab savedPassword={savedPassword} />}
 
           {/* ===== POS TAB ===== */}
           {activeTab === 'pos' && (
