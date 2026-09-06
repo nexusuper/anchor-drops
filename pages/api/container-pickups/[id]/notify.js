@@ -12,7 +12,7 @@ const checkRate = rateLimit({ windowMs: 60_000, max: 20 });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!checkRate(req, res)) return;
+  if (!(await checkRate(req, res))) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
   const parsed = BodySchema.safeParse(req.body);

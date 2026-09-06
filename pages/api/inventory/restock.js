@@ -11,7 +11,7 @@ const RestockSchema = z.object({ product_id: z.enum(PRODUCT_IDS), quantity: z.co
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!adminRate(req, res)) return;
+  if (!(await adminRate(req, res))) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
   const parsed = RestockSchema.safeParse(req.body);

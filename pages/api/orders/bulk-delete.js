@@ -8,7 +8,7 @@ const BodySchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) })
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!adminRate(req, res)) return;
+  if (!(await adminRate(req, res))) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
   const parsed = BodySchema.safeParse(req.body);

@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   const { id } = req.query;
 
   if (req.method === 'PATCH') {
-    if (!adminRate(req, res)) return;
+    if (!(await adminRate(req, res))) return;
     if (!await verifyAdminWithLockout(req, res)) return;
     const parsed = PatchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid update data' });
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'DELETE') {
-    if (!adminRate(req, res)) return;
+    if (!(await adminRate(req, res))) return;
     if (!await verifyAdminWithLockout(req, res)) return;
     const { data: pickup } = await supabase.from('container_pickups').select('status').eq('id', id).single();
     if (!pickup) return res.status(404).json({ error: 'Pickup not found' });

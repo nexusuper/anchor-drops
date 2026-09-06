@@ -7,7 +7,7 @@ const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!adminRate(req, res)) return;
+  if (!(await adminRate(req, res))) return;
   const staffName = await verifyAdminWithLockout(req, res);
   if (!staffName) return;
 

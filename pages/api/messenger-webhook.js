@@ -5,9 +5,13 @@ import { verifyWebhookSignature } from '@/lib/facebook';
 import { timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { ORDER_NUMBER_SEARCH_RE } from '@/lib/order-number';
+import { normalizePhonePH, phoneVariants } from '@/lib/order-guard';
 
 const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
-const checkRate = rateLimit({ windowMs: 60_000, max: 60 });
+// GET is Facebook's one-time verify handshake; POST is the untrusted inbound
+// webhook that drives DB writes and outbound sends, so it gets its own tighter cap.
+const verifyRate = rateLimit({ windowMs: 60_000, max: 60 });
+const eventRate = rateLimit({ windowMs: 60_000, max: 30 });
 
 export const config = { api: { bodyParser: false } };
 
@@ -32,7 +36,8 @@ function rawBody(req) {
 }
 
 export default async function handler(req, res) {
-  if (!checkRate(req, res)) return;
+  const limited = req.method === 'POST' ? eventRate : verifyRate;
+  if (!(await limited(req, res))) return;
 
   // Webhook verification (GET request from Facebook)
   if (req.method === 'GET') {
@@ -104,12 +109,14 @@ export default async function handler(req, res) {
           await handlePostback(senderPsid, event.postback.payload);
         }
 
-        // m.me?ref=<orderId> deep-link (from the confirmation page) — binds automatically.
-        // `referral` fires for existing conversations; `postback.referral` rides GET_STARTED for new users.
+        // m.me?ref=<orderId> deep-link (from the confirmation page). The ref value
+        // is attacker-craftable exactly like a typed message (anyone can open
+        // m.me/<page>?ref=<guess> themselves), so it gets the same phone-gate as
+        // the typed-message path below rather than binding on sight.
         const ref = event.referral?.ref || event.postback?.referral?.ref;
         if (ref) {
           const orderRef = extractOrderRef(ref);
-          if (orderRef) await linkOrderToPsid(senderPsid, orderRef);
+          if (orderRef) await requestOrConfirmLink(senderPsid, orderRef, extractPhone(ref));
         }
       }
     }
@@ -138,14 +145,49 @@ function extractOrderRef(str) {
   return null;
 }
 
+const PHONE_RE = /(?:\+?63|0)9\d{9}/;
+
+function extractPhone(str) {
+  const match = String(str || '').match(PHONE_RE);
+  return match ? match[0] : null;
+}
+
+// order_number is short and partly guessable (see lib/order-number.js's own
+// entropy note), and unlike a UUID it's meant to be typed/shared by hand — so
+// knowing it alone isn't proof of ownership. A pending bind (order found, phone
+// not yet confirmed) is held here per PSID until the customer also states the
+// phone number on the order, in this message or a follow-up one. Best-effort
+// only (in-memory, one Vercel instance, same limitation as lib/rate-limit.js) —
+// worst case the customer just has to send both again after a cold start.
+const pendingLinks = new Map();
+const PENDING_TTL_MS = 10 * 60_000;
+
+function phoneMatchesOrder(phone, orderPhone) {
+  if (!phone || !orderPhone) return false;
+  return phoneVariants(orderPhone).includes(normalizePhonePH(phone));
+}
+
 // Bind a customer's Messenger PSID to an order (and their customer record).
-// Shared by the typed-Order-ID path and the m.me?ref= deep-link path.
 // Returns true if a binding happened. Never throws to the caller.
-async function linkOrderToPsid(senderPsid, ref) {
+async function bindOrder(senderPsid, order) {
+  await getSupabase().from('orders').update({ messenger_psid: senderPsid }).eq('id', order.id);
+  if (order.customer_id) {
+    await getSupabase().from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
+  }
+  // sendReply is try/caught internally, so an FB API error here can't 500 the webhook
+  // after the DB write already committed. Status is deliberately not echoed here —
+  // it would confirm a guessed order number to whoever guessed it.
+  await sendReply(senderPsid, `Got it — your order is linked.`);
+}
+
+// Look up ref, and either bind immediately (UUID — 128 bits, not guessable) or
+// require the order's phone number before binding (order_number — guessable).
+// Returns 'linked' | 'pending' | 'not_found'.
+async function requestOrConfirmLink(senderPsid, ref, phoneInSameMessage) {
   const supabase = getSupabase();
   const { data: order } = await supabase
     .from('orders')
-    .select('id, messenger_psid, status, created_at, customer_id')
+    .select('id, phone, messenger_psid, status, created_at, customer_id')
     .eq(ref.column, ref.value)
     .maybeSingle();
 
@@ -153,27 +195,46 @@ async function linkOrderToPsid(senderPsid, ref) {
   // the window where a stale/completed order ID (e.g. from an old screenshot)
   // could be used by a stranger to bind their Messenger to someone else's order.
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  if (order && !order.messenger_psid && !['delivered', 'cancelled'].includes(order.status) && order.created_at > thirtyDaysAgo) {
-    await supabase.from('orders').update({ messenger_psid: senderPsid }).eq('id', order.id);
-    if (order.customer_id) {
-      await supabase.from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
-    }
-    // sendReply is try/caught internally, so an FB API error here can't 500 the webhook
-    // after the DB write already committed.
-    await sendReply(senderPsid, `Got it — your order is linked. Current status: ${order.status}.`);
-    return true;
+  const eligible = order && !order.messenger_psid && !['delivered', 'cancelled'].includes(order.status) && order.created_at > thirtyDaysAgo;
+  if (!eligible) return 'not_found';
+
+  if (ref.column === 'id') {
+    await bindOrder(senderPsid, order);
+    return 'linked';
   }
-  return false;
+
+  if (phoneMatchesOrder(phoneInSameMessage, order.phone)) {
+    pendingLinks.delete(senderPsid);
+    await bindOrder(senderPsid, order);
+    return 'linked';
+  }
+
+  pendingLinks.set(senderPsid, { order, expiresAt: Date.now() + PENDING_TTL_MS });
+  return 'pending';
 }
 
 async function handleMessage(senderPsid, messageText) {
+  const pending = pendingLinks.get(senderPsid);
+  if (pending && pending.expiresAt > Date.now()) {
+    const phone = extractPhone(messageText);
+    if (phone && phoneMatchesOrder(phone, pending.order.phone)) {
+      pendingLinks.delete(senderPsid);
+      await bindOrder(senderPsid, pending.order);
+      return;
+    }
+  }
+
   const orderRef = extractOrderRef(messageText);
   if (orderRef) {
-    const linked = await linkOrderToPsid(senderPsid, orderRef);
-    if (!linked) {
+    const result = await requestOrConfirmLink(senderPsid, orderRef, extractPhone(messageText));
+    if (result === 'not_found') {
       await sendReply(senderPsid,
         `❌ Sorry, I couldn't find order #${orderRef.value}.\n\n` +
         `Please double-check the Order ID from your confirmation page and try again.`
+      );
+    } else if (result === 'pending') {
+      await sendReply(senderPsid,
+        `To confirm this is your order, please also send the phone number used to place it.`
       );
     }
     return;

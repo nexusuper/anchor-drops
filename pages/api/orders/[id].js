@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   const { id } = req.query;
 
   if (req.method === 'GET') {
-    if (!readRate(req, res)) return;
+    if (!(await readRate(req, res))) return;
 
     const { data: order, error } = await byIdOrNumber(supabase.from('orders').select('*'), id).single();
     if (error || !order) return res.status(404).json({ error: 'Order not found' });
@@ -90,7 +90,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'PATCH') {
-    if (!adminRate(req, res)) return;
+    if (!(await adminRate(req, res))) return;
 
     // Customer self-cancel, before the admin gate. Requires the order's own
     // phone number and only ever moves a pending order to cancelled — it can
@@ -223,7 +223,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'DELETE') {
-    if (!adminRate(req, res)) return;
+    if (!(await adminRate(req, res))) return;
     if (!await verifyAdminWithLockout(req, res)) return;
     const { data: order } = await supabase.from('orders').select('status').eq('id', id).single();
     if (!order) return res.status(404).json({ error: 'Order not found' });

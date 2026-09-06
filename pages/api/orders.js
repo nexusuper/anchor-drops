@@ -54,7 +54,7 @@ const OrderSchema = z.object({
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    if (!adminRate(req, res)) return;
+    if (!(await adminRate(req, res))) return;
     if (!await verifyAdminWithLockout(req, res)) return;
     try {
       const supabase = getSupabase();
@@ -121,7 +121,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    if (!orderRate(req, res)) return;
+    if (!(await orderRate(req, res))) return;
 
     const parsed = OrderSchema.safeParse(req.body);
     if (!parsed.success) {

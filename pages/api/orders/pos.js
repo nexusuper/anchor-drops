@@ -43,7 +43,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!posRate(req, res)) return;
+  if (!(await posRate(req, res))) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
   const parsed = POSOrderSchema.safeParse(req.body);

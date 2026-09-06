@@ -6,7 +6,8 @@ import { EXPENSE_CATEGORIES } from '@/lib/expenses';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 
-const adminRate = rateLimit({ windowMs: 60_000, max: 60 });
+const readRate = rateLimit({ windowMs: 60_000, max: 60 });
+const writeRate = rateLimit({ windowMs: 60_000, max: 20 });
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -23,7 +24,8 @@ const CreateSchema = z.object({
 });
 
 export default async function handler(req, res) {
-  if (!adminRate(req, res)) return;
+  const limited = req.method === 'POST' ? writeRate : readRate;
+  if (!(await limited(req, res))) return;
   if (!await verifyAdminWithLockout(req, res)) return;
 
   const supabase = getSupabase();

@@ -2,9 +2,9 @@ import { rateLimit } from '@/lib/rate-limit';
 
 const limiter = rateLimit({ windowMs: 60_000, max: 20 });
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-  if (!limiter(req, res)) return;
+  if (!(await limiter(req, res))) return;
   const { message, stack, url, context } = req.body || {};
   // Public, unauthenticated endpoint: bound every field before logging, not
   // just the ones reportError() happens to send. A direct POST could push an

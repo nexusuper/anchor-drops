@@ -7,7 +7,7 @@ const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 const DeleteSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) });
 
 export default async function handler(req, res) {
-  if (!adminRate(req, res)) return;
+  if (!(await adminRate(req, res))) return;
   if (!await verifyAdminWithLockout(req, res)) return;
   const supabase = getSupabase();
 

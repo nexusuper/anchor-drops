@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!checkRate(req, res)) return;
+  if (!(await checkRate(req, res))) return;
 
   const secret = process.env.FB_WEBHOOK_SECRET;
   if (!secret) {
