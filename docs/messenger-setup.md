@@ -38,11 +38,10 @@ running deployment).
 1. App → **Messenger → Settings**.
 2. **Access Tokens**: add your Page, generate the token → put in `FB_PAGE_ACCESS_TOKEN`.
 3. **Webhooks → Add Callback URL**:
-   - Callback URL: `https://clear-flow-nine.vercel.app/api/messenger-webhook`
-     (pre-rename host, deliberately still aliased to production. The site is
-     also served at `anchor-drops.vercel.app`; either host works for the
-     webhook, but do not delete the `clear-flow-nine` alias while this callback
-     points at it or notifications stop silently.)
+   - Callback URL: `https://www.anchordropscdo.com/api/messenger-webhook`
+     (the canonical domain, and the only production host. Keep the callback
+     here — pointing it at a Vercel-issued alias means deleting that alias
+     stops notifications silently.)
    - Verify Token: the exact value you put in `FB_VERIFY_TOKEN`
    - Click Verify and Save (this hits the GET handshake).
 4. **Subscription Fields** — subscribe to: `messages`, `messaging_postbacks`,

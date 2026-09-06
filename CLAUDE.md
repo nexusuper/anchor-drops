@@ -37,7 +37,7 @@ node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
 - **Tailwind CSS v4** with a custom "claymorphism" design system
 - **Zod** for API input validation
 - **Facebook Messenger API** for order notifications and webhook intake
-- **Deployed on Vercel** (linked project: `nexusupers-projects/anchor-drops`). `https://www.anchordropscdo.com` is canonical — what `NEXT_PUBLIC_SITE_URL` and og:image use (see `lib/seo.js`). Two other Vercel-issued aliases still resolve: `anchor-drops.vercel.app` and `clear-flow-nine.vercel.app`. The pre-rename `clear-flow-nine` alias is kept alive on purpose — the Facebook Messenger webhook callback is pinned to it in the Meta app dashboard, and removing it would silently stop order notifications.
+- **Deployed on Vercel** (linked project: `nexusupers-projects/anchor-drops`). `https://www.anchordropscdo.com` is canonical — what `NEXT_PUBLIC_SITE_URL` and og:image use (see `lib/seo.js`). `www.anchordropscdo.com` is the only production host; the apex `anchordropscdo.com` 308-redirects to it. There are no `.vercel.app` aliases — the pre-rename `clear-flow-nine.vercel.app` was removed once the Facebook Messenger webhook callback was confirmed to point at the canonical domain. Keep external callbacks (Meta, ManyChat) on `www.anchordropscdo.com`, never on a Vercel-issued alias.
 
 ### Pages Router layout
 
