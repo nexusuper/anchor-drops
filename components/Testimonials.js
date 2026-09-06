@@ -1,6 +1,6 @@
 import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
-import { TESTIMONIALS } from '@/lib/testimonials';
+import { TESTIMONIALS, realTestimonials } from '@/lib/testimonials';
 
 function Stars({ count }) {
   return (
@@ -19,6 +19,11 @@ function Stars({ count }) {
 }
 
 export default function Testimonials() {
+  const real = realTestimonials(TESTIMONIALS);
+  // Nothing real yet — hide the whole section rather than show empty cards
+  // or the literal "Add a real customer name" placeholder text to visitors.
+  if (!real.length) return null;
+
   return (
     <section className="max-w-6xl mx-auto px-4 py-16">
       <div className="reveal text-center mb-10">
@@ -28,7 +33,7 @@ export default function Testimonials() {
         </h2>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {TESTIMONIALS.map((t, i) => (
+        {real.map((t, i) => (
           <ClayCard key={i} className={`p-6 reveal reveal-d${i}`}>
             <Stars count={t.rating} />
             <p className="text-clay-ink2 font-semibold text-sm leading-relaxed mb-4">&ldquo;{t.quote}&rdquo;</p>
