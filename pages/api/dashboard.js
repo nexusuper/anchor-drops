@@ -98,6 +98,39 @@ export default async function handler(req, res) {
       .slice(0, 5)
       .map((c) => ({ ...c, total_spent: Math.round(c.total_spent * 100) / 100 }));
 
+    const { data: eventRows, error: eventsErr } = await supabase
+      .from('site_events')
+      .select('session_id, event_type, path, label, referrer, created_at')
+      .gte('created_at', new Date(Date.now() - 30 * 86_400_000).toISOString());
+    if (eventsErr) throw eventsErr;
+
+    const visitorsByDay = new Map(days.map((d) => [d, new Set()]));
+    const pageCounts = {};
+    const clickCounts = {};
+    const referrerCounts = {};
+    const allSessions = new Set();
+    for (const e of eventRows) {
+      allSessions.add(e.session_id);
+      const d = manilaDate(new Date(e.created_at));
+      visitorsByDay.get(d)?.add(e.session_id);
+      if (e.event_type === 'pageview') {
+        pageCounts[e.path] = (pageCounts[e.path] || 0) + 1;
+        if (e.referrer) {
+          try {
+            const host = new URL(e.referrer).hostname.replace(/^www\./, '');
+            if (host && !host.includes('anchordropscdo.com')) referrerCounts[host] = (referrerCounts[host] || 0) + 1;
+          } catch { /* not a URL — ignore */ }
+        }
+      } else if (e.event_type === 'click' && e.label) {
+        const key = `${e.path} · ${e.label}`;
+        clickCounts[key] = (clickCounts[key] || 0) + 1;
+      }
+    }
+    const visitorSeries = days.map((d) => ({ date: d, visitors: visitorsByDay.get(d).size }));
+    const topPages = Object.entries(pageCounts).map(([path, count]) => ({ path, count })).sort((a, b) => b.count - a.count).slice(0, 8);
+    const topClicks = Object.entries(clickCounts).map(([target, count]) => ({ target, count })).sort((a, b) => b.count - a.count).slice(0, 8);
+    const topReferrers = Object.entries(referrerCounts).map(([host, count]) => ({ host, count })).sort((a, b) => b.count - a.count).slice(0, 5);
+
     return res.status(200).json({
       kpis: {
         revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
@@ -111,6 +144,13 @@ export default async function handler(req, res) {
       statusBreakdown,
       topBarangays,
       topCustomers,
+      traffic: {
+        visitors30d: allSessions.size,
+        visitorSeries,
+        topPages,
+        topClicks,
+        topReferrers,
+      },
     });
   } catch (err) {
     console.error('Dashboard query failed:', err);

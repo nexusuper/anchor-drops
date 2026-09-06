@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import MessengerButton from '@/components/MessengerButton';
 import { canonicalFor } from '@/lib/seo';
 import { reportError } from '@/lib/reportError';
+import { trackPageview, initClickTracking } from '@/lib/track';
 import { Fredoka, Nunito, Space_Grotesk } from 'next/font/google';
 
 const fredoka = Fredoka({
@@ -70,6 +71,17 @@ export default function App({ Component, pageProps }) {
     router.events.on('routeChangeComplete', handleRouteChange);
     return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
+
+  // First-party visitor tracking — skip /admin so staff using the panel never
+  // count as site traffic.
+  useEffect(() => {
+    initClickTracking();
+    const track = (url) => { if (!url.startsWith('/admin')) trackPageview(url); };
+    track(router.asPath);
+    router.events.on('routeChangeComplete', track);
+    return () => router.events.off('routeChangeComplete', track);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Scroll-reveal: add .is-visible to .reveal elements as they enter the viewport
   useEffect(() => {
