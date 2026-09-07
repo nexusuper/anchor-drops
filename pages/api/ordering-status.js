@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
     const [{ data: settingRow, error: settingErr }, { data: products, error: productsErr }] = await Promise.all([
       supabase.from('app_settings').select('value').eq('key', 'ordering_enabled').maybeSingle(),
-      supabase.from('products').select('sku').eq('is_active', true),
+      supabase.from('products').select('sku').eq('is_active', true).eq('sold_out', false),
     ]);
     if (settingErr) throw settingErr;
     if (productsErr) throw productsErr;

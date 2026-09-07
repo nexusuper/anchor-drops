@@ -4,7 +4,13 @@ import { rateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
-const ToggleSchema = z.object({ sku: z.string().min(1), is_active: z.boolean() });
+const ToggleSchema = z.object({
+  sku: z.string().min(1),
+  is_active: z.boolean().optional(),
+  sold_out: z.boolean().optional(),
+  refill_price: z.number().nonnegative().optional(),
+  container_price: z.number().nonnegative().optional(),
+}).refine((v) => Object.keys(v).length > 1, { message: 'No fields to update' });
 
 export default async function handler(req, res) {
   if (!(await adminRate(req, res))) return;
@@ -21,8 +27,8 @@ export default async function handler(req, res) {
   if (req.method === 'PATCH') {
     const parsed = ToggleSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid request' });
-    const { sku, is_active } = parsed.data;
-    const { data, error } = await supabase.from('products').update({ is_active }).eq('sku', sku).select('sku');
+    const { sku, ...updates } = parsed.data;
+    const { data, error } = await supabase.from('products').update(updates).eq('sku', sku).select('sku');
     if (error) return res.status(500).json({ error: 'Failed to update product' });
     if (!data || data.length === 0) return res.status(404).json({ error: 'Product not found' });
     return res.status(200).json({ success: true });
