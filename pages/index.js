@@ -22,7 +22,7 @@ const features = [
   },
   {
     icon: 'filter',
-    title: 'Free Refill Vouchers',
+    title: 'Free Refill After 10 Orders',
     desc: 'Every order earns loyalty rewards. Rack up free gallons automatically just by ordering the way you already do.',
   },
 ];
@@ -63,13 +63,13 @@ export default function Home() {
           </ClayCard>
           <ClayCard className="reveal reveal-d1 p-10 text-center clay-raised">
             <div className="font-editorial text-3xl font-bold text-clay-sky mb-2">Free</div>
-            <div className="text-sm font-bold text-clay-muted uppercase tracking-wide">Refill Vouchers</div>
+            <div className="text-sm font-bold text-clay-muted uppercase tracking-wide">Refill After 10 Orders</div>
           </ClayCard>
         </div>
 
         {/* Trust badges */}
         <div className="reveal flex flex-wrap justify-center gap-x-6 gap-y-2 mt-8">
-          {['DTI Registered', 'Bacteriological / Water Quality Tested', 'Sanitary Permit & Compliance', 'Same Day Delivery', 'Cash on Delivery'].map((t) => (
+          {['DTI Registered', 'Bacteriological / Water Quality Tested', 'Sanitary Permit & Compliance', 'Accepts COD, GCASH, Bank Transfer'].map((t) => (
             <span key={t} className="inline-flex items-center gap-1.5 text-sm font-bold text-clay-ink2">
               <ClayIcon name="check" className="w-4 h-4 text-clay-skydeep" /> {t}
             </span>
