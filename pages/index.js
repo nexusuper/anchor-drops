@@ -55,7 +55,7 @@ export default function Home() {
 
       {/* Stats highlights */}
       <section className="max-w-6xl mx-auto px-4 pb-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
           <ClayCard className="reveal p-10 text-center clay-raised">
             <div className="font-editorial text-3xl font-bold text-clay-sky mb-2">Same</div>
             <div className="font-editorial text-3xl font-bold text-clay-sky mb-1">Day</div>
@@ -64,6 +64,10 @@ export default function Home() {
           <ClayCard className="reveal reveal-d1 p-10 text-center clay-raised">
             <div className="font-editorial text-3xl font-bold text-clay-sky mb-2">Free</div>
             <div className="text-sm font-bold text-clay-muted uppercase tracking-wide">Refill After 10 Orders</div>
+          </ClayCard>
+          <ClayCard className="reveal reveal-d2 p-10 text-center clay-raised">
+            <div className="font-editorial text-3xl font-bold text-clay-sky mb-2">100%</div>
+            <div className="text-sm font-bold text-clay-muted uppercase tracking-wide">Purified, Not Mineral Water</div>
           </ClayCard>
         </div>
 
