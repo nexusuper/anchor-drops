@@ -221,7 +221,9 @@ function OrderForm({ activeSkus }) {
     refillSubtotal: refillTotal,
   });
   const codeApplied = codePhase === 'verified';
-  const voucherDiscount = codeApplied ? rewardCount * VOUCHER_VALUE : 0;
+  // A voucher buys a refill, it never pays out the difference: on a ₱25 pickup
+  // refill the discount is ₱25, not the ₱30 face value.
+  const voucherDiscount = codeApplied ? Math.min(rewardCount * VOUCHER_VALUE, refillTotal) : 0;
   const grandTotal = Math.max(0, baseTotal - voucherDiscount);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));

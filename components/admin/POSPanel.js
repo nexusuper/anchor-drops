@@ -78,7 +78,7 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
   const estDeliveryFee = 0; // delivery fee retired — pricing is all-in on the product price now
   const availableVouchers = loyalty?.available || 0;
   const clampedRedeem = Math.max(0, Math.min(Number(redeemVouchers) || 0, availableVouchers, totalQuantity));
-  const estVoucherDiscount = clampedRedeem * 30;
+  const estVoucherDiscount = Math.min(clampedRedeem * 30, cartSubtotal);
   const estTotal = Math.max(0, cartSubtotal + estDeliveryFee - estVoucherDiscount);
   const cashNum = Number(cashTendered) || 0;
   const estChange = paymentMethod === 'cod' && cashTendered !== '' ? Math.max(0, cashNum - estTotal) : null;

@@ -52,10 +52,13 @@ assert.equal(r.earned, 2);
 assert.equal(r.redeemed, 1);
 assert.equal(r.available, 1);
 
-// maxRedeemable: capped by available, quantity, and refill value (whole vouchers)
+// maxRedeemable: capped by available and quantity — one voucher buys one refill
 assert.equal(maxRedeemable({ available: 3, quantity: 2, refillSubtotal: 60 }), 2);
-assert.equal(maxRedeemable({ available: 3, quantity: 5, refillSubtotal: 60 }), 2);
-assert.equal(maxRedeemable({ available: 1, quantity: 5, refillSubtotal: 20 }), 0);
+assert.equal(maxRedeemable({ available: 3, quantity: 5, refillSubtotal: 60 }), 3);
+// A single ₱25 store-pickup refill is redeemable even though 25 < VOUCHER_VALUE.
+assert.equal(maxRedeemable({ available: 1, quantity: 1, refillSubtotal: 25 }), 1);
 assert.equal(maxRedeemable({ available: 0, quantity: 5, refillSubtotal: 90 }), 0);
+// Nothing to discount, nothing to redeem.
+assert.equal(maxRedeemable({ available: 3, quantity: 5, refillSubtotal: 0 }), 0);
 
 console.log('loyalty.test.mjs: all assertions passed');
