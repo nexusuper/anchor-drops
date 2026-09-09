@@ -109,9 +109,10 @@ export default async function handler(req, res) {
   for (const line of resolvedLines) {
     const take = Math.min(remainingVouchers, line.quantity);
     line.voucher_count = take;
-    // Clamped to the line's own value — a voucher covers a refill, it never
-    // pays out the difference on a refill cheaper than VOUCHER_VALUE.
-    line.voucher_discount = Math.min(take * VOUCHER_VALUE, line.line_base);
+    // Clamped to the line's refill value — a voucher buys refills, not
+    // containers, and never pays out the difference on a refill cheaper than
+    // VOUCHER_VALUE. Mirrors the clamp in create_order (migration 0039).
+    line.voucher_discount = Math.min(take * VOUCHER_VALUE, line.refill_subtotal);
     remainingVouchers -= take;
   }
 
