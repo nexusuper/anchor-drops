@@ -49,7 +49,7 @@ export default function Products() {
                   <span className="font-editorial text-clay-skydeep font-bold text-lg">₱{p.refill + p.container}</span>
                 </div>
               </div>
-              <ClayButton href={`/order?product=${p.id}`} className="mt-auto w-full">Order Now</ClayButton>
+              <ClayButton href={`/order?product=${p.id}`} className="mt-auto w-full">ORDER WATER</ClayButton>
             </ClayCard>
           ))}
         </div>
@@ -76,7 +76,7 @@ export default function Products() {
         <div className="reveal max-w-3xl mx-auto rounded-[2rem] px-8 md:px-14 py-14 flex flex-col items-center text-center gap-5 clay-raised">
           <span className="section-pill">Ready to Order?</span>
           <h2 className="font-editorial text-3xl md:text-4xl font-bold text-clay-ink leading-[1.08]">Like what you see?</h2>
-          <ClayButton href="/order" size="lg">Place an Order</ClayButton>
+          <ClayButton href="/order" size="lg">ORDER WATER</ClayButton>
         </div>
       </section>
     </Layout>

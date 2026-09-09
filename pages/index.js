@@ -100,7 +100,7 @@ export default function Home() {
               <li>💳 Cash · GCash/Bank Transfer</li>
             </ul>
             <div className="mt-8">
-              <ClayButton href="/order">Order Today</ClayButton>
+              <ClayButton href="/order">ORDER WATER</ClayButton>
             </div>
           </div>
 
@@ -144,13 +144,14 @@ export default function Home() {
               </span>
               <Jug />
               <h3 className="font-editorial text-lg font-bold text-clay-ink mt-3 mb-1">{p.name}</h3>
-              <p className="font-editorial text-3xl font-bold text-clay-skydeep mb-5">₱{p.refill}</p>
-              <ClayButton href={`/order?product=${p.id}`} className="w-full">Order This</ClayButton>
+              <p className="font-editorial text-3xl font-bold text-clay-skydeep mb-1">₱{p.refill}</p>
+              <p className="text-xs font-bold text-clay-muted mb-5">refill only · container + refill ₱{p.refill + p.container}</p>
+              <ClayButton href={`/order?product=${p.id}`} className="w-full">ORDER WATER</ClayButton>
             </ClayCard>
           ))}
         </div>
         <div className="reveal text-center">
-          <ClayButton href="/products" variant="outline">View All Products &amp; Pricing →</ClayButton>
+          <ClayButton href="/products" variant="outline">VIEW PRICES</ClayButton>
         </div>
       </section>
 
@@ -165,8 +166,8 @@ export default function Home() {
             No account, no hassle. Order, check its status anytime, and earn a free refill voucher every time.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
-            <ClayButton href="/order" size="lg">Place Your Order</ClayButton>
-            <ClayButton href="/track" variant="outline" size="lg">Track an Order</ClayButton>
+            <ClayButton href="/order" size="lg">ORDER WATER</ClayButton>
+            <ClayButton href="/track" variant="outline" size="lg">TRACK ORDER</ClayButton>
           </div>
           <p className="text-sm font-bold text-clay-skydeep">💧 Free refill after 10 gallons — every order counts.</p>
         </div>

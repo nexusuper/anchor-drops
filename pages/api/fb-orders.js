@@ -2,7 +2,7 @@ import { getSupabase } from '@/lib/supabaseAdmin';
 import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { rateLimit } from '@/lib/rate-limit';
 import { timingSafeEqual } from '@/lib/auth';
-import { PRODUCTS_BY_ID } from '@/lib/products';
+import { PRODUCTS, PRODUCTS_BY_ID } from '@/lib/products';
 import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleAddress,
@@ -68,7 +68,14 @@ export default async function handler(req, res) {
   // "resolve this manually" sentinel for that case. A barangay that does match
   // is canonicalised so the delivery route groups it with the web orders.
   const barangay = matchBarangay(b.barangay) || 'TBD (via Messenger)';
-  const productKey = PRODUCTS_BY_ID[b.product_type] ? b.product_type : 'slim5';
+  // This intake always ends in a delivery — it requires a delivery address and
+  // files a delivery order. A store-pickup SKU here would sell the walk-in price
+  // with a delivery run attached, so it resolves to the delivery product of the
+  // same container type instead. Unknown SKUs keep the existing 'slim5' default.
+  const requestedKey = PRODUCTS_BY_ID[b.product_type] ? b.product_type : 'slim5';
+  const productKey = PRODUCTS_BY_ID[requestedKey].fulfillment === 'pickup'
+    ? (PRODUCTS.find((p) => p.fulfillment === 'delivery' && p.size === PRODUCTS_BY_ID[requestedKey].size)?.id ?? 'slim5')
+    : requestedKey;
 
   if (!phone || !address || !gallons) {
     return res.status(400).json({ error: 'Missing required fields: need phone, address, and quantity' });

@@ -47,7 +47,7 @@ export default function Navbar() {
             href="/order"
             className="rounded-full px-5 py-2 font-editorial font-semibold text-sm text-white clay-btn-primary clay-pressable"
           >
-            Order Now
+            ORDER WATER
           </Link>
         </div>
 
@@ -81,7 +81,7 @@ export default function Navbar() {
             className="text-center rounded-full px-5 py-2.5 font-editorial font-semibold text-sm text-white clay-btn-primary"
             onClick={() => setOpen(false)}
           >
-            Order Now
+            ORDER WATER
           </Link>
         </div>
       )}

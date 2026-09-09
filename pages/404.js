@@ -14,7 +14,7 @@ export default function NotFound() {
         </p>
         <div className="flex flex-col gap-3 mt-8">
           <ClayButton href="/" className="w-full">Back to Home</ClayButton>
-          <ClayButton href="/track" variant="outline" className="w-full">Track an Order</ClayButton>
+          <ClayButton href="/track" variant="outline" className="w-full">TRACK ORDER</ClayButton>
         </div>
       </section>
     </Layout>

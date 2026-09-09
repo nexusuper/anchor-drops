@@ -5,7 +5,7 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import LocationPicker from '@/components/order/LocationPicker';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
-import { PRODUCTS, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY } from '@/lib/products';
+import { PRODUCTS, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY, STORE_ADDRESS_DISPLAY } from '@/lib/products';
 import {
   classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday,
   PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
@@ -208,6 +208,10 @@ function OrderForm({ activeSkus }) {
   }, [form.phone]);
 
   const selectedProduct = availableProducts.find((p) => p.id === form.product_type) || availableProducts[0] || PRODUCTS[0];
+  // Store pickup drops the whole delivery half of the form: no address, no
+  // barangay, no map pin, no container-pickup run — the one date/time the
+  // customer picks is when they come to the store.
+  const storePickup = selectedProduct.fulfillment === 'pickup';
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
   const baseTotal = refillTotal + containerTotal;
@@ -217,7 +221,9 @@ function OrderForm({ activeSkus }) {
     refillSubtotal: refillTotal,
   });
   const codeApplied = codePhase === 'verified';
-  const voucherDiscount = codeApplied ? rewardCount * VOUCHER_VALUE : 0;
+  // A voucher buys a refill, it never pays out the difference: on a ₱25 pickup
+  // refill the discount is ₱25, not the ₱30 face value.
+  const voucherDiscount = codeApplied ? Math.min(rewardCount * VOUCHER_VALUE, refillTotal) : 0;
   const grandTotal = Math.max(0, baseTotal - voucherDiscount);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -233,18 +239,32 @@ function OrderForm({ activeSkus }) {
 
   const today = manilaToday();
   const pickupSlot = classifyPickupTime(form.pickup_time);
-  const showAfternoonNotice = form.has_empty_containers && pickupSlot === 'afternoon';
-  const allowedDelivery = form.has_empty_containers
+  const showAfternoonNotice = !storePickup && form.has_empty_containers && pickupSlot === 'afternoon';
+  const allowedDelivery = !storePickup && form.has_empty_containers
     ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time })
     : null;
   const scheduleCheck = validateSchedule({
-    hasEmptyContainers: form.has_empty_containers,
+    hasEmptyContainers: !storePickup && form.has_empty_containers,
     pickupDate: form.pickup_date || null,
     pickupTime: form.pickup_time || null,
     deliveryDate: form.delivery_date,
     deliveryTime: form.delivery_time,
     today,
   });
+
+  // Switching between a store-pickup and a delivery product invalidates the
+  // schedule the customer already picked (different windows, different meaning).
+  // Skips the first run so a restored draft keeps the schedule it was saved with.
+  const prevStorePickup = useRef(storePickup);
+  useEffect(() => {
+    if (prevStorePickup.current === storePickup) return;
+    prevStorePickup.current = storePickup;
+    setForm((f) => ({
+      ...f,
+      has_empty_containers: storePickup ? false : f.has_empty_containers,
+      pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '',
+    }));
+  }, [storePickup]);
 
   // Auto-fill the locked delivery date whenever pickup changes to a valid slot.
   useEffect(() => {
@@ -312,7 +332,7 @@ function OrderForm({ activeSkus }) {
       setError('Please enter a valid PH mobile number (09XX-XXX-XXXX).');
       return;
     }
-    if (!matchBarangay(form.barangay)) {
+    if (!storePickup && !matchBarangay(form.barangay)) {
       setError('We deliver within Cagayan de Oro only. Please pick your barangay from the list.');
       return;
     }
@@ -335,18 +355,22 @@ function OrderForm({ activeSkus }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          // The server stamps the store's address for a pickup; sending a
+          // half-filled one would only be stored and never used.
+          address: storePickup ? null : form.address,
+          barangay: storePickup ? null : form.barangay,
+          lat: storePickup ? null : form.lat,
+          lng: storePickup ? null : form.lng,
           client_order_id: clientOrderIdRef.current,
           container_size: selectedProduct.size,
           total_amount: baseTotal,
           reward_requested: rewardCount,
           reward_code: codeApplied ? codeInput : null,
-          has_empty_containers: form.has_empty_containers,
-          pickupDate: form.has_empty_containers ? form.pickup_date : null,
-          pickupTime: form.has_empty_containers ? form.pickup_time : null,
+          has_empty_containers: !storePickup && form.has_empty_containers,
+          pickupDate: !storePickup && form.has_empty_containers ? form.pickup_date : null,
+          pickupTime: !storePickup && form.has_empty_containers ? form.pickup_time : null,
           deliveryDate: form.delivery_date,
           deliveryTime: form.delivery_time,
-          lat: form.lat,
-          lng: form.lng,
         }),
       });
       const data = await res.json();
@@ -401,6 +425,14 @@ function OrderForm({ activeSkus }) {
                 <input id="phone" required type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
                 {phoneInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
               </div>
+              {storePickup ? (
+                <div className="clay-inset rounded-xl p-4 text-sm text-clay-ink2" role="status">
+                  <p className="font-semibold mb-1">You&apos;re picking this up at the store.</p>
+                  <p className="text-clay-muted font-semibold">{STORE_ADDRESS_DISPLAY}</p>
+                  <p className="text-clay-muted mt-1">No address needed. Want it delivered instead? Pick a Delivery product below.</p>
+                </div>
+              ) : (
+              <>
               <div>
                 <label htmlFor="address" className="block text-sm font-medium text-clay-ink2 mb-1">Street Address *</label>
                 <input id="address" required value={form.address} onChange={(e) => set('address', e.target.value)} className="clay-input" placeholder="123 Rizal St." autoComplete="street-address" />
@@ -424,6 +456,8 @@ function OrderForm({ activeSkus }) {
                   onChange={(pt) => setForm((f) => ({ ...f, lat: pt?.lat ?? null, lng: pt?.lng ?? null }))}
                 />
               </div>
+              </>
+              )}
             </div>
           </ClayCard>
 
@@ -567,7 +601,7 @@ function OrderForm({ activeSkus }) {
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Payment Method</h2>
             <div className="space-y-2">
               {[
-                { id: 'cod', label: 'Cash on Delivery' },
+                { id: 'cod', label: storePickup ? 'Cash at the store' : 'Cash on Delivery' },
                 { id: 'gcash', label: 'GCash / Bank Transfer' },
               ].map((m) => (
                 <label key={m.id} className={`flex items-center gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.payment_method === m.id ? 'clay-tile-selected' : ''}`}>
@@ -633,10 +667,27 @@ function OrderForm({ activeSkus }) {
             )}
           </ClayCard>
 
-          {/* Pickup & Delivery Scheduling */}
+          {/* Scheduling */}
           <ClayCard className="p-6">
-            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Pickup &amp; Delivery</h2>
+            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">
+              {storePickup ? 'When are you coming to the store?' : 'Container Pickup & Delivery'}
+            </h2>
             <div className="space-y-4">
+              {storePickup ? (
+                <>
+                  <div>
+                    <label htmlFor="store_pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup date *</label>
+                    <input id="store_pickup_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
+                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
+                  </div>
+                  <div>
+                    <label htmlFor="store_pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup time *</label>
+                    <input id="store_pickup_time" required type="time" min={DELIVERY_ONLY_START} max={DELIVERY_ONLY_END} value={form.delivery_time} onChange={(e) => set('delivery_time', e.target.value)} className="clay-input" />
+                    <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
+                  </div>
+                </>
+              ) : (
+              <>
               <div>
                 <label className="block text-sm font-medium text-clay-ink2 mb-2">Do you have empty containers at home for us to pick up? *</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -729,6 +780,9 @@ function OrderForm({ activeSkus }) {
                 </>
               )}
 
+              </>
+              )}
+
               {!scheduleCheck.ok && (form.delivery_time || form.pickup_time) && (
                 <p className="text-clay-danger text-xs" role="alert">{scheduleCheck.error}</p>
               )}
@@ -746,6 +800,10 @@ function OrderForm({ activeSkus }) {
           <ClayCard className="p-6">
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Order Summary</h2>
             <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-clay-muted">Getting it by</span>
+                <span className="font-medium">{storePickup ? 'Store pickup' : 'Delivery'}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-clay-muted">{selectedProduct.name} x{form.quantity}</span>
                 <span className="font-medium">₱{refillTotal}</span>
