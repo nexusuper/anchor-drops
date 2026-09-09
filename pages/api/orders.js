@@ -5,7 +5,7 @@ import { computeRewards, normalizePhone, phoneMatches } from '@/lib/loyalty';
 import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { PRODUCTS_BY_ID } from '@/lib/products';
+import { PRODUCTS_BY_ID, STORE_PICKUP_ADDRESS, STORE_PICKUP_BARANGAY } from '@/lib/products';
 import { validateSchedule, manilaToday } from '@/lib/scheduling';
 import { matchBarangay } from '@/lib/service-area';
 import {
@@ -20,8 +20,11 @@ const orderRate = rateLimit({ windowMs: 60_000, max: 10 });
 const OrderSchema = z.object({
   customer_name: z.string().min(1).max(200),
   phone: z.string().min(7).max(20),
-  address: z.string().min(1).max(500),
-  barangay: z.string().min(1).max(200),
+  // Optional because a store-pickup product has no customer address; the
+  // server stamps the store's own address for those (see storePickup below)
+  // and still requires a real one for every delivery product.
+  address: z.string().max(500).optional().nullable(),
+  barangay: z.string().max(200).optional().nullable(),
   product_type: z.string().min(1).max(50),
   container_size: z.string().min(1).max(20),
   quantity: z.coerce.number().int().min(1).max(50),
@@ -152,17 +155,27 @@ export default async function handler(req, res) {
     if (!isPlausibleName(customer_name)) {
       return res.status(400).json({ error: 'Please enter your name.' });
     }
-    if (!isPlausibleAddress(address)) {
-      return res.status(400).json({ error: 'Please enter a complete delivery address (house/street details).' });
-    }
-    // Store the canonical spelling, not the customer's, so the delivery route
-    // and barangay reports stop splitting over "Brgy. Bugo" vs "bugo".
-    const canonicalBarangay = matchBarangay(barangay);
-    if (!canonicalBarangay) {
-      return res.status(400).json({ error: 'We deliver within Cagayan de Oro only. Please enter a valid barangay.' });
+    // Store pickup: no address is collected, and no delivery/container-pickup
+    // run is scheduled — the chosen slot is when the customer comes to the store.
+    const storePickup = product.fulfillment === 'pickup';
+    let orderAddress = STORE_PICKUP_ADDRESS;
+    let canonicalBarangay = STORE_PICKUP_BARANGAY;
+    if (!storePickup) {
+      if (!isPlausibleAddress(address || '')) {
+        return res.status(400).json({ error: 'Please enter a complete delivery address (house/street details).' });
+      }
+      orderAddress = address;
+      // Store the canonical spelling, not the customer's, so the delivery route
+      // and barangay reports stop splitting over "Brgy. Bugo" vs "bugo".
+      canonicalBarangay = matchBarangay(barangay || '');
+      if (!canonicalBarangay) {
+        return res.status(400).json({ error: 'We deliver within Cagayan de Oro only. Please enter a valid barangay.' });
+      }
     }
 
-    const hasEmptyContainers = !!has_empty_containers;
+    // A store pickup can never also be a container pickup run at the customer's
+    // home, whatever the client posted.
+    const hasEmptyContainers = !storePickup && !!has_empty_containers;
     const today = manilaToday();
     const scheduleCheck = validateSchedule({
       hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today,
@@ -354,7 +367,7 @@ export default async function handler(req, res) {
       p_branch_id: DEFAULT_BRANCH_ID,
       p_customer_name: customer_name,
       p_phone: phone,
-      p_address: address,
+      p_address: orderAddress,
       p_barangay: canonicalBarangay,
       p_address_label: 'Home',
       p_product_type: product_type,
@@ -379,8 +392,8 @@ export default async function handler(req, res) {
       // has_empty_containers from orders.pickup_date, which was always null.
       p_pickup_date: hasEmptyContainers ? pickupDate : null,
       p_pickup_time: hasEmptyContainers ? pickupTime : null,
-      p_lat: lat ?? null,
-      p_lng: lng ?? null,
+      p_lat: storePickup ? null : (lat ?? null),
+      p_lng: storePickup ? null : (lng ?? null),
     });
 
     if (rpcErr) {
@@ -392,7 +405,7 @@ export default async function handler(req, res) {
       const { error: pickupErr } = await supabase.from('container_pickups').insert({
         branch_id: DEFAULT_BRANCH_ID,
         order_id: order.id,
-        customer_name, phone, address, barangay: canonicalBarangay,
+        customer_name, phone, address: orderAddress, barangay: canonicalBarangay,
         container_qty: quantity,
         pickup_date: pickupDate, pickup_time: pickupTime,
         delivery_date: deliveryDate, delivery_time: deliveryTime,

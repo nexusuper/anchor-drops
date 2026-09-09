@@ -7,7 +7,7 @@ const QUICK_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/products', label: 'Products & Pricing' },
   { href: '/rewards', label: 'Rewards' },
-  { href: '/order', label: 'Order Now' },
+  { href: '/order', label: 'Order Water' },
   { href: '/track', label: 'Track Order' },
 ];
 

@@ -12,18 +12,18 @@ export default function AnimatedHero() {
           </div>
 
           <h1 className="font-editorial text-5xl md:text-[4.5rem] font-bold leading-[1.04] tracking-tight text-clay-ink">
-            Fresh Water,{' '}
-            <span style={{ color: '#0ea5e9' }}>Delivered</span>
-            <br />to Your Door.
+            Skip the Call.{' '}
+            <span style={{ color: '#0ea5e9' }}>Order Water</span>
+            <br />Online.
           </h1>
 
           <p className="text-clay-muted text-lg font-semibold leading-relaxed max-w-[50ch]">
-            Order purified water refills in minutes. No account needed — fill the form and we deliver the same day.
+            Need water? We&apos;ve got you. Order a refill in under two minutes — no account, no phone call. Pick it up at the store or have it delivered.
           </p>
 
           <div className="flex flex-wrap gap-3">
-            <ClayButton href="/order" size="lg">Order Now</ClayButton>
-            <ClayButton href="/products" variant="outline" size="lg">See Pricing</ClayButton>
+            <ClayButton href="/order" size="lg">ORDER WATER</ClayButton>
+            <ClayButton href="/products" variant="outline" size="lg">VIEW PRICES</ClayButton>
           </div>
 
         </div>
