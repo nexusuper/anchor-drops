@@ -769,7 +769,7 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                           <ClayIcon name="star" className="w-4 h-4 inline text-amber-500 mr-1" /> Loyalty Progress
                         </span>
                         <span className="text-xs text-clay-muted">
-                          {selectedCustomer.loyalty.deliveredGallons} gal delivered &middot; {selectedCustomer.loyalty.gallonsToNext} gal to next free refill
+                          {selectedCustomer.loyalty.deliveredGallons} refills delivered &middot; {selectedCustomer.loyalty.gallonsToNext} to next free refill
                         </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2.5">

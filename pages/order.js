@@ -563,7 +563,11 @@ function OrderForm({ activeSkus }) {
 
               <div>
                 <label htmlFor="quantity" className="block text-sm font-medium text-clay-ink2 mb-1">Quantity (refills) *</label>
-                <input id="quantity" type="number" min="1" max="50" required value={form.quantity} onChange={(e) => set('quantity', parseInt(e.target.value) || 1)} className="clay-input" />
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => set('quantity', Math.max(1, form.quantity - 1))} disabled={form.quantity <= 1} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label="Fewer refills">−</button>
+                  <input id="quantity" type="number" min="1" max="50" required value={form.quantity} onChange={(e) => set('quantity', Math.min(50, Math.max(1, parseInt(e.target.value) || 1)))} className="clay-input text-center" />
+                  <button type="button" onClick={() => set('quantity', Math.min(50, form.quantity + 1))} disabled={form.quantity >= 50} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label="More refills">+</button>
+                </div>
               </div>
 
               <div>
@@ -837,7 +841,7 @@ function OrderForm({ activeSkus }) {
             <div className="bg-clay-danger-bg border border-red-200 text-clay-danger rounded-xl px-4 py-3 text-sm" role="alert">{error}</div>
           )}
 
-          <p className="text-center text-sm font-semibold text-clay-skydeep">💧 Free refill after 10 gallons — earned automatically on every order.</p>
+          <p className="text-center text-sm font-semibold text-clay-skydeep">💧 Free refill after 10 refills — earned automatically on every order.</p>
 
           <button type="submit" disabled={loading} aria-busy={loading || undefined} className="w-full inline-flex items-center justify-center gap-2 clay-btn-primary clay-pressable rounded-full py-4 text-lg font-editorial font-semibold disabled:opacity-60">
             {loading ? (
