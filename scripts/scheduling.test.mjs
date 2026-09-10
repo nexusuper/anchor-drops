@@ -1,7 +1,24 @@
 import assert from 'node:assert/strict';
 import {
   classifyPickupTime, addDays, computeAllowedDeliveryWindow, validateSchedule, isStoreOpenDay, nextOpenDay,
+  manilaNowTime, STORE_TIME_SLOTS, timeSlots,
 } from '../lib/scheduling.js';
+
+// manilaNowTime — UTC+8, 24h
+assert.equal(manilaNowTime(new Date('2026-07-03T06:30:00Z')), '14:30');
+assert.equal(manilaNowTime(new Date('2026-07-03T16:05:00Z')), '00:05');
+
+// STORE_TIME_SLOTS / timeSlots — only 8-12 and 1-5, no lunch gap
+assert.equal(STORE_TIME_SLOTS[0], '08:00');
+assert.equal(STORE_TIME_SLOTS.at(-1), '17:00');
+assert.ok(STORE_TIME_SLOTS.includes('12:00'));
+assert.ok(!STORE_TIME_SLOTS.includes('12:30'));
+assert.ok(STORE_TIME_SLOTS.every((t) => classifyPickupTime(t)));
+assert.deepEqual(timeSlots({ minTime: '13:00', maxTime: '17:00' }), ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00']);
+// today at 14:10 -> passed slots hidden; another date unaffected
+assert.equal(timeSlots({ date: '2026-07-03', today: '2026-07-03', nowTime: '14:10' })[0], '14:30');
+assert.equal(timeSlots({ date: '2026-07-04', today: '2026-07-03', nowTime: '14:10' })[0], '08:00');
+assert.deepEqual(timeSlots({ date: '2026-07-03', today: '2026-07-03', nowTime: '17:00' }), []);
 
 // classifyPickupTime — store hours 08:00-12:00 and 13:00-17:00
 assert.equal(classifyPickupTime('08:00'), 'morning');
@@ -160,6 +177,30 @@ assert.equal(
   validateSchedule({
     hasEmptyContainers: true, pickupDate: '2026-07-04', pickupTime: '09:00',
     deliveryDate: '2026-07-03', deliveryTime: '14:00', today: '2026-07-03',
+  }).ok,
+  false
+);
+
+// nowTime: a pickup already passed today is rejected; later today is fine
+assert.equal(
+  validateSchedule({
+    hasEmptyContainers: true, pickupDate: '2026-07-03', pickupTime: '09:00',
+    deliveryDate: '2026-07-03', deliveryTime: '14:00', today: '2026-07-03', nowTime: '10:00',
+  }).ok,
+  false
+);
+assert.deepEqual(
+  validateSchedule({
+    hasEmptyContainers: true, pickupDate: '2026-07-03', pickupTime: '11:00',
+    deliveryDate: '2026-07-03', deliveryTime: '14:00', today: '2026-07-03', nowTime: '10:00',
+  }),
+  { ok: true }
+);
+// nowTime: delivery-only / store pickup time already passed today
+assert.equal(
+  validateSchedule({
+    hasEmptyContainers: false, pickupDate: null, pickupTime: null,
+    deliveryDate: '2026-07-03', deliveryTime: '09:00', today: '2026-07-03', nowTime: '15:00',
   }).ok,
   false
 );

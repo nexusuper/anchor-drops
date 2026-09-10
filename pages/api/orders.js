@@ -6,7 +6,7 @@ import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID, STORE_PICKUP_ADDRESS, STORE_PICKUP_BARANGAY } from '@/lib/products';
-import { validateSchedule, manilaToday } from '@/lib/scheduling';
+import { validateSchedule, manilaToday, manilaNowTime } from '@/lib/scheduling';
 import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleName, isPlausibleAddress,
@@ -178,7 +178,7 @@ export default async function handler(req, res) {
     const hasEmptyContainers = !storePickup && !!has_empty_containers;
     const today = manilaToday();
     const scheduleCheck = validateSchedule({
-      hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today,
+      hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today, nowTime: manilaNowTime(),
     });
     if (!scheduleCheck.ok) {
       return res.status(400).json({ error: scheduleCheck.error });
