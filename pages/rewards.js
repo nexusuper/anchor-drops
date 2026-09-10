@@ -38,7 +38,7 @@ export default function Rewards() {
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
           Earn free <span style={{ color: '#0ea5e9' }}>refills.</span>
         </h1>
-        <p className="text-clay-muted font-semibold mt-3">Earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} gallons.</p>
+        <p className="text-clay-muted font-semibold mt-3">Earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} refills.</p>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
@@ -67,9 +67,9 @@ export default function Rewards() {
           <>
             <ClayCard className="p-6 text-center">
               <ClayIcon name="drop" className="w-10 h-10 mx-auto mb-3 text-clay-sky" />
-              <p className="font-editorial text-xl font-bold text-clay-ink mb-1">No gallons counted yet</p>
+              <p className="font-editorial text-xl font-bold text-clay-ink mb-1">No refills counted yet</p>
               <p className="text-sm text-clay-muted font-semibold">
-                Place your first order and you&apos;ll earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} gallons.
+                Place your first order and you&apos;ll earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} refills.
               </p>
             </ClayCard>
             {data.containers_out != null && data.containers_out > 0 && (
@@ -78,7 +78,7 @@ export default function Rewards() {
               </ClayCard>
             )}
             <p className="text-center text-xs text-clay-muted">
-              Gallons count once an order is marked <strong>delivered</strong> — orders still pending or on the way aren&apos;t counted yet.
+              Refills count once an order is marked <strong>delivered</strong> — orders still pending or on the way aren&apos;t counted yet.
             </p>
             <ClayButton href="/order" className="w-full">Place Your First Order</ClayButton>
           </>
@@ -89,7 +89,7 @@ export default function Rewards() {
             <ClayCard className="p-6 text-center">
               <p className="text-sm text-clay-muted font-semibold mb-1">Free refills available</p>
               <p className="font-editorial text-6xl font-bold text-clay-skydeep mb-1">{data.available}</p>
-              <p className="text-sm text-clay-muted">{data.deliveredGallons} gallons delivered all-time</p>
+              <p className="text-sm text-clay-muted">{data.deliveredGallons} refill{data.deliveredGallons === 1 ? '' : 's'} delivered all-time</p>
               {data.containers_out != null && (
                 <p className="text-sm text-clay-muted mt-1">
                   {data.containers_out > 0
@@ -102,7 +102,7 @@ export default function Rewards() {
             <ClayCard className="p-6">
               <div className="flex justify-between text-sm font-semibold text-clay-ink2 mb-2">
                 <span>Progress to next free refill</span>
-                <span>{data.gallonsToNext} gal to go</span>
+                <span>{data.gallonsToNext} refill{data.gallonsToNext === 1 ? '' : 's'} to go</span>
               </div>
               <div className="clay-inset rounded-full h-4 overflow-hidden">
                 <div className="h-full rounded-full clay-btn-primary" style={{ width: `${earnedPct}%` }} />
@@ -115,7 +115,7 @@ export default function Rewards() {
             </ClayCard>
 
             <p className="text-center text-xs text-clay-muted">
-              Gallons count once an order is marked <strong>delivered</strong> — orders still pending or on the way aren&apos;t counted yet.
+              Refills count once an order is marked <strong>delivered</strong> — orders still pending or on the way aren&apos;t counted yet.
             </p>
 
             <ClayButton href="/order" className="w-full">Order &amp; Redeem</ClayButton>

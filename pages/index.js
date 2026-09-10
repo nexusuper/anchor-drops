@@ -167,7 +167,7 @@ export default function Home() {
             <ClayButton href="/order" size="lg">ORDER WATER</ClayButton>
             <ClayButton href="/track" variant="outline" size="lg">TRACK ORDER</ClayButton>
           </div>
-          <p className="text-sm font-bold text-clay-skydeep">💧 Free refill after 10 gallons — every order counts.</p>
+          <p className="text-sm font-bold text-clay-skydeep">💧 Free refill after 10 refills — every order counts.</p>
         </div>
       </section>
 
