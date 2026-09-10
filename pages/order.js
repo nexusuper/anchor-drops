@@ -7,10 +7,32 @@ import LocationPicker from '@/components/order/LocationPicker';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { PRODUCTS, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY, STORE_ADDRESS_DISPLAY } from '@/lib/products';
 import {
-  classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday,
-  PICKUP_MORNING_START, PICKUP_MORNING_END, PICKUP_AFTERNOON_START, PICKUP_AFTERNOON_END,
-  DELIVERY_ONLY_START, DELIVERY_ONLY_END, STORE_HOURS_LABEL,
+  classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday, manilaNowTime,
+  timeSlots, STORE_HOURS_LABEL,
 } from '@/lib/scheduling';
+
+// '13:30' -> '1:30 PM'
+function formatSlot(t) {
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// Dropdown of bookable slots only — native time pickers on mobile ignore min/max,
+// which let customers pick lunch-break or after-hours times.
+function TimeSelect({ id, value, onChange, date, today, nowTime, minTime, maxTime }) {
+  const slots = timeSlots({ minTime, maxTime, date, today, nowTime });
+  return (
+    <>
+      <select id={id} required value={value} onChange={(e) => onChange(e.target.value)} className="clay-input">
+        <option value="" disabled>Select a time</option>
+        {slots.map((t) => <option key={t} value={t}>{formatSlot(t)}</option>)}
+      </select>
+      {date && slots.length === 0 && (
+        <p className="text-clay-danger text-xs mt-1" role="alert">No times left on this date — please choose another day.</p>
+      )}
+    </>
+  );
+}
 import {
   DRAFT_KEY, readStored, readIdentity, writeIdentity, clearIdentity, writeOrderPhone,
 } from '@/lib/client-storage';
@@ -238,6 +260,7 @@ function OrderForm({ activeSkus }) {
   const gcashInvalid = form.payment_method === 'gcash' && form.gcash_number.trim().length > 0 && !isPhMobile(form.gcash_number);
 
   const today = manilaToday();
+  const nowTime = manilaNowTime();
   const pickupSlot = classifyPickupTime(form.pickup_time);
   const showAfternoonNotice = !storePickup && form.has_empty_containers && pickupSlot === 'afternoon';
   const allowedDelivery = !storePickup && form.has_empty_containers
@@ -250,6 +273,7 @@ function OrderForm({ activeSkus }) {
     deliveryDate: form.delivery_date,
     deliveryTime: form.delivery_time,
     today,
+    nowTime,
   });
 
   // Switching between a store-pickup and a delivery product invalidates the
@@ -686,7 +710,7 @@ function OrderForm({ activeSkus }) {
                   </div>
                   <div>
                     <label htmlFor="store_pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup time *</label>
-                    <input id="store_pickup_time" required type="time" min={DELIVERY_ONLY_START} max={DELIVERY_ONLY_END} value={form.delivery_time} onChange={(e) => set('delivery_time', e.target.value)} className="clay-input" />
+                    <TimeSelect id="store_pickup_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} />
                     <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
                   </div>
                 </>
@@ -722,20 +746,10 @@ function OrderForm({ activeSkus }) {
                   </div>
                   <div>
                     <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
-                    <input
-                      id="pickup_time"
-                      required
-                      type="time"
-                      min={PICKUP_MORNING_START}
-                      max={PICKUP_AFTERNOON_END}
-                      value={form.pickup_time}
-                      onChange={(e) => set('pickup_time', e.target.value)}
-                      className="clay-input"
-                    />
-                    <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
-                    {form.pickup_time && !pickupSlot && (
-                      <p className="text-clay-danger text-xs mt-1" role="alert">Please choose a time in the morning or afternoon window above.</p>
-                    )}
+                    <TimeSelect id="pickup_time" value={form.pickup_time} onChange={(v) => setForm((f) => ({ ...f, pickup_time: v, delivery_time: '' }))} date={form.pickup_date} today={today} nowTime={nowTime} />
+                    <p className="text-xs text-clay-muted mt-1">
+                      Store hours: {STORE_HOURS_LABEL}. Morning pickup = delivery same afternoon; afternoon pickup = delivery next day.
+                    </p>
                   </div>
 
                   {showAfternoonNotice && (
@@ -752,18 +766,9 @@ function OrderForm({ activeSkus }) {
                       </div>
                       <div>
                         <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                        <input
-                          id="delivery_time"
-                          required
-                          type="time"
-                          min={allowedDelivery.minTime}
-                          max={allowedDelivery.maxTime}
-                          value={form.delivery_time}
-                          onChange={(e) => set('delivery_time', e.target.value)}
-                          className="clay-input"
-                        />
+                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={allowedDelivery.date} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
                         <p className="text-xs text-clay-muted mt-1">
-                          {pickupSlot === 'morning' ? `Allowed: ${allowedDelivery.minTime}–${allowedDelivery.maxTime}.` : `Store hours: ${STORE_HOURS_LABEL}.`}
+                          {pickupSlot === 'morning' ? 'Same-day delivery: 1:00–5:00 PM.' : `Next-day delivery: ${STORE_HOURS_LABEL}.`}
                         </p>
                       </div>
                     </>
@@ -778,7 +783,7 @@ function OrderForm({ activeSkus }) {
                   </div>
                   <div>
                     <label htmlFor="delivery_time_only" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                    <input id="delivery_time_only" required type="time" min={DELIVERY_ONLY_START} max={DELIVERY_ONLY_END} value={form.delivery_time} onChange={(e) => set('delivery_time', e.target.value)} className="clay-input" />
+                    <TimeSelect id="delivery_time_only" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} />
                     <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
                   </div>
                 </>
