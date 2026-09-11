@@ -6,6 +6,8 @@ import { timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { ORDER_NUMBER_SEARCH_RE } from '@/lib/order-number';
 import { normalizePhonePH, phoneVariants } from '@/lib/order-guard';
+import { PRODUCTS, BUSINESS_PHONE_DISPLAY } from '@/lib/products';
+import { SITE_URL } from '@/lib/seo';
 
 const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
 // GET is Facebook's one-time verify handshake; POST is the untrusted inbound
@@ -101,7 +103,12 @@ export default async function handler(req, res) {
           }
         }
 
-        if (event.message?.text) {
+        // Quick replies arrive as a message with a quick_reply payload, NOT as a
+        // postback — routing them through handleMessage would drop them into the
+        // free-text fallback and the menu buttons would appear to do nothing.
+        if (event.message?.quick_reply?.payload) {
+          await handlePostback(senderPsid, event.message.quick_reply.payload);
+        } else if (event.message?.text) {
           await handleMessage(senderPsid, event.message.text);
         }
 
@@ -213,6 +220,35 @@ async function requestOrConfirmLink(senderPsid, ref, phoneInSameMessage) {
   return 'pending';
 }
 
+const MENU = [
+  { title: '🛒 Order water', payload: 'MENU_ORDER' },
+  { title: '💰 Prices', payload: 'MENU_PRICES' },
+  { title: '🙋 Talk to a person', payload: 'MENU_HUMAN' },
+];
+
+// "Talk to a person" mutes the bot for this PSID so the auto-replies don't talk
+// over the owner. In-memory, best-effort — same single-instance caveat as
+// pendingLinks above; worst case the bot resumes early after a cold start.
+const humanHandoff = new Map();
+const HANDOFF_TTL_MS = 60 * 60_000;
+
+function inHandoff(senderPsid) {
+  const until = humanHandoff.get(senderPsid);
+  if (!until) return false;
+  if (until < Date.now()) {
+    humanHandoff.delete(senderPsid);
+    return false;
+  }
+  return true;
+}
+
+function priceList() {
+  return PRODUCTS
+    .filter((p) => p.id !== 'slim5')
+    .map((p) => `• ${p.name} — ₱${p.refill} refill (+₱${p.container} with container)`)
+    .join('\n');
+}
+
 async function handleMessage(senderPsid, messageText) {
   const pending = pendingLinks.get(senderPsid);
   if (pending && pending.expiresAt > Date.now()) {
@@ -229,8 +265,11 @@ async function handleMessage(senderPsid, messageText) {
     const result = await requestOrConfirmLink(senderPsid, orderRef, extractPhone(messageText));
     if (result === 'not_found') {
       await sendReply(senderPsid,
-        `❌ Sorry, I couldn't find order #${orderRef.value}.\n\n` +
-        `Please double-check the Order ID from your confirmation page and try again.`
+        `❌ Sorry, I couldn't find order #${orderRef.value}.
+
+` +
+        `Please double-check the Order ID from your confirmation page and try again.`,
+        MENU
       );
     } else if (result === 'pending') {
       await sendReply(senderPsid,
@@ -240,26 +279,67 @@ async function handleMessage(senderPsid, messageText) {
     return;
   }
 
-  // Fallback: guide customer to use their Order ID
+  // Owner is handling this thread — stay quiet.
+  if (inHandoff(senderPsid)) return;
+
   await sendReply(senderPsid,
-    `👋 Hi! I'm the Anchor Drops assistant.\n\n` +
-    `To receive order updates here, send me your Order ID.\n\n` +
-    `You can find your Order ID on your order confirmation page, or look it up at our website using your phone number. 💧`
+    `👋 Hi! I'm the Anchor Drops assistant.
+
+` +
+    `What can I help you with?`,
+    MENU
   );
 }
 
 async function handlePostback(senderPsid, payload) {
-  if (payload === 'GET_STARTED') {
-    await sendReply(senderPsid,
-      `👋 Welcome to Anchor Drops!\n\n` +
-      `We deliver fresh purified water right to your door.\n\n` +
-      `To get order updates here, send me your Order ID. You can find it on your confirmation page after placing an order.\n\n` +
-      `Questions? Just type your message and we'll get back to you! 💧`
-    );
+  switch (payload) {
+    case 'MENU_ORDER':
+      humanHandoff.delete(senderPsid);
+      await sendReply(senderPsid,
+        `🛒 Order here: ${SITE_URL}/order
+
+` +
+        `After you place it, send me your Order ID and I'll post delivery updates in this chat. 💧`,
+        MENU
+      );
+      return;
+    case 'MENU_PRICES':
+      humanHandoff.delete(senderPsid);
+      await sendReply(senderPsid,
+        `💰 Our prices:
+${priceList()}
+
+` +
+        `Delivery fee depends on your barangay — the exact total shows at checkout: ${SITE_URL}/order`,
+        MENU
+      );
+      return;
+    case 'MENU_HUMAN':
+      humanHandoff.set(senderPsid, Date.now() + HANDOFF_TTL_MS);
+      await sendReply(senderPsid,
+        `🙋 Sure — leave your message here and our team will reply shortly.
+
+` +
+        `Need us now? Call or text ${BUSINESS_PHONE_DISPLAY}.`
+      );
+      return;
+    case 'GET_STARTED':
+    default:
+      humanHandoff.delete(senderPsid);
+      await sendReply(senderPsid,
+        `👋 Welcome to Anchor Drops!
+
+` +
+        `We deliver fresh purified water right to your door.
+
+` +
+        `Pick an option below, or send your Order ID to get delivery updates here. 💧`,
+        MENU
+      );
   }
 }
 
-async function sendReply(recipientPsid, messageText) {
+async function sendReply(recipientPsid, messageText, quickReplies) {
   const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
   if (!FB_PAGE_ACCESS_TOKEN) {
     console.log('FB_PAGE_ACCESS_TOKEN not set, skipping reply');
@@ -272,7 +352,15 @@ async function sendReply(recipientPsid, messageText) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FB_PAGE_ACCESS_TOKEN}` },
       body: JSON.stringify({
         recipient: { id: recipientPsid },
-        message: { text: messageText },
+        message: {
+          text: messageText,
+          ...(quickReplies?.length
+            ? { quick_replies: quickReplies.map((qr) => ({ content_type: 'text', title: qr.title, payload: qr.payload })) }
+            : {}),
+        },
+        // Always a reply to an inbound message, so the 24h window is open and no
+        // MESSAGE_TAG (which needs unapproved App Review) is needed.
+        messaging_type: 'RESPONSE',
       }),
     });
   } catch (error) {
