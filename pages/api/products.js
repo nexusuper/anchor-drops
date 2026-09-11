@@ -19,7 +19,8 @@ export default async function handler(req, res) {
   const supabase = getSupabase();
 
   if (req.method === 'GET') {
-    const { data, error } = await supabase.from('products').select('*').order('sort_order');
+    // Supply rows (tag 'supply') are stock-only items managed in the Inventory tab.
+    const { data, error } = await supabase.from('products').select('*').or('tag.is.null,tag.neq.supply').order('sort_order');
     if (error) return res.status(500).json({ error: 'Failed to load products' });
     return res.status(200).json({ products: data || [] });
   }
