@@ -290,12 +290,14 @@ function OrderForm({ activeSkus }) {
     }));
   }, [storePickup]);
 
-  // Auto-fill the locked delivery date whenever pickup changes to a valid slot.
+  // Default the delivery date to the earliest allowed day whenever the pickup
+  // slot changes. Morning pickup locks to that same day; afternoon pickup only
+  // suggests the next open day — the customer can still pick a later one.
   useEffect(() => {
-    if (form.has_empty_containers && allowedDelivery && form.delivery_date !== allowedDelivery.date) {
-      queueMicrotask(() => setForm((f) => ({ ...f, delivery_date: allowedDelivery.date })));
+    if (form.has_empty_containers && allowedDelivery) {
+      queueMicrotask(() => setForm((f) => ({ ...f, delivery_date: allowedDelivery.minDate })));
     }
-  }, [form.has_empty_containers, allowedDelivery?.date]);
+  }, [form.has_empty_containers, allowedDelivery?.minDate]);
 
   // Keep the chosen count within bounds; any bound change cancels a prior verification.
   useEffect(() => {
@@ -748,28 +750,41 @@ function OrderForm({ activeSkus }) {
                     <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
                     <TimeSelect id="pickup_time" value={form.pickup_time} onChange={(v) => setForm((f) => ({ ...f, pickup_time: v, delivery_time: '' }))} date={form.pickup_date} today={today} nowTime={nowTime} />
                     <p className="text-xs text-clay-muted mt-1">
-                      Store hours: {STORE_HOURS_LABEL}. Morning pickup = delivery same afternoon; afternoon pickup = delivery next day.
+                      Store hours: {STORE_HOURS_LABEL}. Morning pickup = delivery same afternoon; afternoon pickup = delivery next day or later, your choice.
                     </p>
                   </div>
 
                   {showAfternoonNotice && (
                     <div className="clay-inset rounded-xl p-3 text-sm text-clay-ink2" role="status">
-                      We will try to pick up in the afternoon but delivery will be tomorrow.
+                      We will try to pick up in the afternoon. Delivery will be tomorrow or later — pick a date below.
                     </div>
                   )}
 
-                  {allowedDelivery && (
+                  {allowedDelivery && pickupSlot === 'morning' && (
                     <>
                       <div>
                         <label htmlFor="delivery_date_locked" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
-                        <input id="delivery_date_locked" type="date" value={allowedDelivery.date} readOnly disabled className="clay-input opacity-70" />
+                        <input id="delivery_date_locked" type="date" value={allowedDelivery.minDate} readOnly disabled className="clay-input opacity-70" />
                       </div>
                       <div>
                         <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={allowedDelivery.date} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
-                        <p className="text-xs text-clay-muted mt-1">
-                          {pickupSlot === 'morning' ? 'Same-day delivery: 1:00–5:00 PM.' : `Next-day delivery: ${STORE_HOURS_LABEL}.`}
-                        </p>
+                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={allowedDelivery.minDate} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
+                        <p className="text-xs text-clay-muted mt-1">Same-day delivery: 1:00–5:00 PM.</p>
+                      </div>
+                    </>
+                  )}
+
+                  {allowedDelivery && pickupSlot === 'afternoon' && (
+                    <>
+                      <div>
+                        <label htmlFor="delivery_date_choice" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
+                        <input id="delivery_date_choice" required type="date" min={allowedDelivery.minDate} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
+                        <p className="text-xs text-clay-muted mt-1">Next day onward, your choice. Closed Sundays.</p>
+                      </div>
+                      <div>
+                        <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
+                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
+                        <p className="text-xs text-clay-muted mt-1">{STORE_HOURS_LABEL}.</p>
                       </div>
                     </>
                   )}
