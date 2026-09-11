@@ -47,7 +47,7 @@ function SettingsContent() {
     const supabase = getSupabaseBrowser();
     const [{ data: settingsData, error }, { data: productsData, error: productsErr }] = await Promise.all([
       supabase.from('app_settings').select('*'),
-      supabase.from('products').select('*').order('sort_order'),
+      supabase.from('products').select('*').or('tag.is.null,tag.neq.supply').order('sort_order'),
     ]);
     if (!error) setSettings(settingsData);
     if (!productsErr) setProducts(productsData);

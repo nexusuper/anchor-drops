@@ -2,12 +2,12 @@ import { getSupabase } from '@/lib/supabaseAdmin';
 import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { PRODUCTS_BY_ID } from '@/lib/products';
 import { z } from 'zod';
 
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
-const PRODUCT_IDS = Object.keys(PRODUCTS_BY_ID);
-const RestockSchema = z.object({ product_id: z.enum(PRODUCT_IDS), quantity: z.coerce.number().int().min(1).max(10000) });
+// Any inventory row, including supply items added at runtime; adjust_inventory
+// raises for an unknown SKU.
+const RestockSchema = z.object({ product_id: z.string().regex(/^[a-z0-9_]{1,64}$/), quantity: z.coerce.number().int().min(1).max(100000) });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
