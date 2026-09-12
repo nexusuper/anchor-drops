@@ -11,7 +11,7 @@ import InventoryTab from './admin/InventoryTab';
 import ProductsTab from './admin/ProductsTab';
 import ScreenshotsTab from './admin/ScreenshotsTab';
 import ExpensesTab from './admin/ExpensesTab';
-import Receipt, { orderToReceipt } from './admin/Receipt';
+import Receipt, { orderToReceipt, receiptFilename } from './admin/Receipt';
 import { SEGMENT_DEFS } from '@/lib/segments';
 import { apiFetch } from '@/lib/api-client';
 import { ORDER_STATUS_BADGE } from '@/lib/order-status';
@@ -111,6 +111,22 @@ export default function AdminPanel() {
   const [messengerResult, setMessengerResult] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [printOrder, setPrintOrder] = useState(null);
+  const [savingJpeg, setSavingJpeg] = useState(false);
+
+  async function downloadReceiptJpeg(receipt) {
+    setSavingJpeg(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const el = document.getElementById('pos-receipt');
+      const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/jpeg', 0.92);
+      a.download = receiptFilename(receipt);
+      a.click();
+    } finally {
+      setSavingJpeg(false);
+    }
+  }
   const [deleting, setDeleting] = useState(null);
   const [applyRewardModal, setApplyRewardModal] = useState(null);
   const [applyingReward, setApplyingReward] = useState(null);
@@ -390,8 +406,11 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
           <div className="max-w-lg mx-auto">
             <Receipt receipt={orderToReceipt(printOrder)} />
             <div className="flex gap-3 mt-4 print:hidden">
-              <button onClick={() => window.print()} className="flex-1 clay-btn-primary clay-pressable rounded-full py-3 font-display font-semibold">
+              <button onClick={() => window.print()} className="flex-1 clay-btn-white clay-pressable rounded-full py-3 font-display font-semibold text-clay-skydeep">
                 <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Print
+              </button>
+              <button onClick={() => downloadReceiptJpeg(orderToReceipt(printOrder))} disabled={savingJpeg} className="flex-1 clay-btn-primary clay-pressable rounded-full py-3 font-display font-semibold disabled:opacity-50">
+                <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> {savingJpeg ? 'Saving…' : 'Save as JPEG'}
               </button>
               <button onClick={() => setPrintOrder(null)} className="flex-1 clay-btn-white clay-pressable rounded-full py-3 font-display font-semibold text-clay-skydeep">
                 Close
@@ -492,7 +511,7 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
               onClick={() => setActiveTab('pickups')}
               className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'pickups' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
             >
-              <ClayIcon name="clipboard" className="w-4 h-4 inline mr-1" /> Pickups
+              <ClayIcon name="clipboard" className="w-4 h-4 inline mr-1" /> Gallon Pickup
             </button>
             <button
               onClick={() => setActiveTab('expenses')}

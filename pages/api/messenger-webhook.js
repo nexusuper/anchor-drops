@@ -6,7 +6,7 @@ import { timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { ORDER_NUMBER_SEARCH_RE } from '@/lib/order-number';
 import { normalizePhonePH, phoneVariants } from '@/lib/order-guard';
-import { PRODUCTS, BUSINESS_PHONE_DISPLAY } from '@/lib/products';
+import { PRODUCTS } from '@/lib/products';
 import { SITE_URL } from '@/lib/seo';
 
 const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
@@ -317,10 +317,7 @@ ${priceList()}
     case 'MENU_HUMAN':
       humanHandoff.set(senderPsid, Date.now() + HANDOFF_TTL_MS);
       await sendReply(senderPsid,
-        `🙋 Sure — leave your message here and our team will reply shortly.
-
-` +
-        `Need us now? Call or text ${BUSINESS_PHONE_DISPLAY}.`
+        `🙋 Got it — leave your message here and someone from our team will reach out to you shortly.`
       );
       return;
     case 'GET_STARTED':
