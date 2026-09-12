@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import ClayIcon from '../ui/ClayIcon';
-import Receipt from './Receipt';
+import Receipt, { receiptFilename } from './Receipt';
 import { PRODUCTS, PRODUCTS_BY_ID } from '@/lib/products';
 
 const PAYMENT_METHODS = [
@@ -44,6 +44,7 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [receipt, setReceipt] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   async function lookupLoyalty(rawPhone) {
     const digits = rawPhone.replace(/\D/g, '');
@@ -156,8 +157,11 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
       <div className="max-w-lg mx-auto">
         <Receipt receipt={receipt} />
         <div className="flex gap-3 mt-4 print:hidden">
-          <button onClick={() => window.print()} className="flex-1 clay-btn-primary clay-pressable rounded-full py-3 font-display font-semibold">
+          <button onClick={() => window.print()} className="flex-1 clay-raised-sm rounded-full py-3 font-display font-semibold text-clay-skydeep">
             <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> Print Receipt
+          </button>
+          <button onClick={() => downloadReceiptJpeg(receipt)} disabled={downloading} className="flex-1 clay-btn-primary clay-pressable rounded-full py-3 font-display font-semibold disabled:opacity-50">
+            <ClayIcon name="download" className="w-4 h-4 inline mr-1" /> {downloading ? 'Saving…' : 'Save as JPEG'}
           </button>
           <button onClick={() => { setReceipt(null); resetForm(); }} className="flex-1 clay-raised-sm rounded-full py-3 font-display font-semibold text-clay-skydeep">
             New Sale
@@ -165,6 +169,22 @@ export default function POSPanel({ savedPassword, onSaleComplete }) {
         </div>
       </div>
     );
+  }
+
+  async function downloadReceiptJpeg(receiptToSave) {
+    setDownloading(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const el = document.getElementById('pos-receipt');
+      const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
+      const url = canvas.toDataURL('image/jpeg', 0.92);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = receiptFilename(receiptToSave);
+      a.click();
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (

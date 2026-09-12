@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import ClayIcon from '../ui/ClayIcon';
 
+// Same pattern as RouteTab.js: single-stop Google Maps directions, origin = driver's phone location.
+function navUrl(p) {
+  const dest = [p.address, p.barangay, 'Cagayan de Oro'].filter(Boolean).join(', ');
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}&travelmode=driving`;
+}
+
 const STATUS_OPTIONS = [
   { value: 'scheduled', label: 'Scheduled' },
   { value: 'picked_up', label: 'Picked Up' },
@@ -142,7 +148,12 @@ export default function ContainerPickupsPanel({ savedPassword }) {
                       <div className="font-semibold text-clay-ink">{p.customer_name}</div>
                       <a href={`tel:${p.phone}`} className="text-xs text-sky-600">{p.phone}</a>
                     </td>
-                    <td className="py-2 pr-3 text-xs text-clay-muted">{p.address}, {p.barangay}</td>
+                    <td className="py-2 pr-3 text-xs text-clay-muted">
+                      {p.address}, {p.barangay}
+                      <a href={navUrl(p)} target="_blank" rel="noopener noreferrer" className="block text-sky-600 font-semibold mt-0.5">
+                        <ClayIcon name="send" className="w-3 h-3 inline" /> Navigate
+                      </a>
+                    </td>
                     <td className="py-2 pr-3">{p.container_qty}</td>
                     <td className="py-2 pr-3 text-xs">{p.pickup_date} {p.pickup_time}</td>
                     <td className="py-2 pr-3 text-xs">{p.delivery_date} {p.delivery_time}</td>
@@ -197,6 +208,9 @@ export default function ContainerPickupsPanel({ savedPassword }) {
                   </span>
                 </div>
                 <p className="text-xs text-clay-muted mb-1">{p.address}, {p.barangay}</p>
+                <a href={navUrl(p)} target="_blank" rel="noopener noreferrer" className="text-xs text-sky-600 font-semibold inline-flex items-center gap-1 mb-1">
+                  <ClayIcon name="send" className="w-3.5 h-3.5" /> Navigate
+                </a>
                 <p className="text-xs text-clay-muted mb-1">Qty: {p.container_qty}</p>
                 <p className="text-xs text-clay-muted mb-1">Pickup: {p.pickup_date} {p.pickup_time}</p>
                 <p className="text-xs text-clay-muted mb-2">Delivery: {p.delivery_date} {p.delivery_time}</p>
