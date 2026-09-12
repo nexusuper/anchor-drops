@@ -177,8 +177,11 @@ export default async function handler(req, res) {
     // home, whatever the client posted.
     const hasEmptyContainers = !storePickup && !!has_empty_containers;
     const today = manilaToday();
+    const { data: overrideRow } = await getSupabase()
+      .from('app_settings').select('value').eq('key', 'open_override_dates').maybeSingle();
+    const openOverrides = Array.isArray(overrideRow?.value) ? overrideRow.value : [];
     const scheduleCheck = validateSchedule({
-      hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today, nowTime: manilaNowTime(),
+      hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today, nowTime: manilaNowTime(), openOverrides,
     });
     if (!scheduleCheck.ok) {
       return res.status(400).json({ error: scheduleCheck.error });

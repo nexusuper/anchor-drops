@@ -120,10 +120,10 @@ export default function Order() {
     );
   }
 
-  return <OrderForm activeSkus={siteStatus?.activeSkus ?? null} />;
+  return <OrderForm activeSkus={siteStatus?.activeSkus ?? null} openOverrideDates={siteStatus?.openOverrideDates || []} />;
 }
 
-function OrderForm({ activeSkus }) {
+function OrderForm({ activeSkus, openOverrideDates }) {
   const router = useRouter();
   const { product: queryProduct } = router.query;
   // null activeSkus = status check hasn't landed yet (or failed) — show everything.
@@ -263,8 +263,9 @@ function OrderForm({ activeSkus }) {
   const nowTime = manilaNowTime();
   const pickupSlot = classifyPickupTime(form.pickup_time);
   const showAfternoonNotice = !storePickup && form.has_empty_containers && pickupSlot === 'afternoon';
+  const openOverrides = openOverrideDates;
   const allowedDelivery = !storePickup && form.has_empty_containers
-    ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time })
+    ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time, openOverrides })
     : null;
   const scheduleCheck = validateSchedule({
     hasEmptyContainers: !storePickup && form.has_empty_containers,
@@ -274,6 +275,7 @@ function OrderForm({ activeSkus }) {
     deliveryTime: form.delivery_time,
     today,
     nowTime,
+    openOverrides,
   });
 
   // Switching between a store-pickup and a delivery product invalidates the
