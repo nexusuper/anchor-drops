@@ -10,6 +10,7 @@ import RouteTab from './admin/RouteTab';
 import InventoryTab from './admin/InventoryTab';
 import ProductsTab from './admin/ProductsTab';
 import ScreenshotsTab from './admin/ScreenshotsTab';
+import SettingsTab from './admin/SettingsTab';
 import ExpensesTab from './admin/ExpensesTab';
 import Receipt, { orderToReceipt, receiptFilename } from './admin/Receipt';
 import { SEGMENT_DEFS } from '@/lib/segments';
@@ -525,6 +526,12 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
             >
               <ClayIcon name="card" className="w-4 h-4 inline mr-1" /> Payment Screenshots
             </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={'px-5 py-2 rounded-t-xl text-sm font-semibold transition-colors ' + (activeTab === 'settings' ? 'bg-clay-bg text-sky-700' : 'text-white/70 hover:text-white hover:bg-white/10')}
+            >
+              <ClayIcon name="gear" className="w-4 h-4 inline mr-1" /> Settings
+            </button>
           </div>
         </div>
 
@@ -961,6 +968,9 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
 
           {/* ===== SCREENSHOTS TAB ===== */}
           {activeTab === 'screenshots' && <ScreenshotsTab savedPassword={savedPassword} onError={setAdminError} />}
+
+          {/* ===== SETTINGS TAB ===== */}
+          {activeTab === 'settings' && <SettingsTab savedPassword={savedPassword} />}
 
         </div>
       </div>
