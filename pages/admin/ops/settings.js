@@ -62,6 +62,7 @@ function SettingsContent() {
     <div className="space-y-4 max-w-xl">
       {!canEdit && <p className="text-sm text-clay-ink/50">Read-only — only owner/admin can edit settings.</p>}
       <OrderingSection settings={settings} canEdit={canEdit} onSaved={reload} />
+      <BusinessHoursSection settings={settings} canEdit={canEdit} onSaved={reload} />
       <ProductsSection products={products} canEdit={canEdit} onSaved={reload} />
       <LoyaltySection key={JSON.stringify(loyaltySettingsFromSettings(settings))} settings={settings} canEdit={canEdit} onSaved={reload} />
     </div>
@@ -124,6 +125,74 @@ function OrderingSection({ settings, canEdit, onSaved }) {
           </ClayButton>
         )}
       </div>
+      {error && <p className="text-sm text-clay-danger">{error}</p>}
+    </ClayCard>
+  );
+}
+
+// Store is normally closed Sunday (lib/scheduling.js). Dates listed here let
+// online ordering treat that specific day as open, e.g. a one-off Sunday sale.
+function BusinessHoursSection({ settings, canEdit, onSaved }) {
+  const row = settings?.find((s) => s.key === 'open_override_dates');
+  const dates = Array.isArray(row?.value) ? row.value : [];
+  const [newDate, setNewDate] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function save(nextDates) {
+    setError(null);
+    setSaving(true);
+    try {
+      await saveSetting('open_override_dates', nextDates);
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addDate() {
+    if (!newDate || dates.includes(newDate)) return;
+    save([...dates, newDate].sort());
+    setNewDate('');
+  }
+
+  function removeDate(d) {
+    save(dates.filter((x) => x !== d));
+  }
+
+  return (
+    <ClayCard className="p-4 space-y-3">
+      <SectionHeader icon="clock" title="Business Hours" />
+      <p className="text-xs text-clay-ink/60">
+        Store is closed Sundays by default. Add a date below to open online ordering for that Sunday specifically.
+      </p>
+      {dates.length > 0 && (
+        <ul className="space-y-1">
+          {dates.map((d) => (
+            <li key={d} className="flex items-center justify-between text-sm">
+              <span>{d}</span>
+              {canEdit && (
+                <button type="button" className="text-xs text-clay-danger" onClick={() => removeDate(d)} disabled={saving}>
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit && (
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            className="clay-inset rounded-xl px-3 py-2 text-sm flex-1"
+            value={newDate}
+            onChange={(e) => setNewDate(e.target.value)}
+          />
+          <ClayButton size="sm" onClick={addDate} loading={saving} disabled={!newDate}>Add</ClayButton>
+        </div>
+      )}
       {error && <p className="text-sm text-clay-danger">{error}</p>}
     </ClayCard>
   );
