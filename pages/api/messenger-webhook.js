@@ -298,7 +298,7 @@ async function handlePostback(senderPsid, payload) {
       humanHandoff.delete(senderPsid);
       await sendButton(senderPsid,
         `🛒 Tap below to order — after you place it, send me your Order ID and I'll post delivery updates in this chat. 💧`,
-        { title: 'Order water', url: `${SITE_URL}/order` },
+        { title: '🌐 Go to order page', url: `${SITE_URL}/order` },
         MENU
       );
       return;
