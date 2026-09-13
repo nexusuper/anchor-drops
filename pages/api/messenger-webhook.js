@@ -273,7 +273,8 @@ async function handleMessage(senderPsid, messageText) {
       );
     } else if (result === 'pending') {
       await sendReply(senderPsid,
-        `To confirm this is your order, please also send the phone number used to place it.`
+        `To confirm this is your order, please also send the phone number used to place it.`,
+        MENU
       );
     }
     return;
@@ -295,11 +296,9 @@ async function handlePostback(senderPsid, payload) {
   switch (payload) {
     case 'MENU_ORDER':
       humanHandoff.delete(senderPsid);
-      await sendReply(senderPsid,
-        `🛒 Order here: ${SITE_URL}/order
-
-` +
-        `After you place it, send me your Order ID and I'll post delivery updates in this chat. 💧`,
+      await sendButton(senderPsid,
+        `🛒 Tap below to order — after you place it, send me your Order ID and I'll post delivery updates in this chat. 💧`,
+        { title: 'Order water', url: `${SITE_URL}/order` },
         MENU
       );
       return;
@@ -317,7 +316,8 @@ ${priceList()}
     case 'MENU_HUMAN':
       humanHandoff.set(senderPsid, Date.now() + HANDOFF_TTL_MS);
       await sendReply(senderPsid,
-        `🙋 Got it — leave your message here and someone from our team will reach out to you shortly.`
+        `🙋 Got it — leave your message here and someone from our team will reach out to you shortly.`,
+        MENU
       );
       return;
     case 'GET_STARTED':
@@ -362,5 +362,42 @@ async function sendReply(recipientPsid, messageText, quickReplies) {
     });
   } catch (error) {
     console.error('Error sending Messenger reply:', error);
+  }
+}
+
+// Button template with a web_url button opens the site directly in the in-app
+// browser (or system browser) on tap — a real redirect, not a pasted link the
+// customer has to tap out of the text themselves.
+async function sendButton(recipientPsid, text, button, quickReplies) {
+  const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
+  if (!FB_PAGE_ACCESS_TOKEN) {
+    console.log('FB_PAGE_ACCESS_TOKEN not set, skipping reply');
+    return;
+  }
+
+  try {
+    await fetch('https://graph.facebook.com/v18.0/me/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FB_PAGE_ACCESS_TOKEN}` },
+      body: JSON.stringify({
+        recipient: { id: recipientPsid },
+        message: {
+          attachment: {
+            type: 'template',
+            payload: {
+              template_type: 'button',
+              text,
+              buttons: [{ type: 'web_url', url: button.url, title: button.title }],
+            },
+          },
+          ...(quickReplies?.length
+            ? { quick_replies: quickReplies.map((qr) => ({ content_type: 'text', title: qr.title, payload: qr.payload })) }
+            : {}),
+        },
+        messaging_type: 'RESPONSE',
+      }),
+    });
+  } catch (error) {
+    console.error('Error sending Messenger button reply:', error);
   }
 }
