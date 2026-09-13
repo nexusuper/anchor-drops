@@ -254,7 +254,7 @@ function inHandoff(senderPsid) {
 function priceList() {
   return PRODUCTS
     .filter((p) => p.id !== 'slim5')
-    .map((p) => `• ${p.name} — ₱${p.refill} refill (+₱${p.container} with container)`)
+    .map((p) => `• ${p.name} — ₱${p.refill} refill (₱${p.refill + p.container} with brand new container)`)
     .join('\n');
 }
 
@@ -319,7 +319,7 @@ async function handlePostback(senderPsid, payload) {
 ${priceList()}
 
 ` +
-        `Delivery fee depends on your barangay — the exact total shows at checkout: ${SITE_URL}/order`,
+        `Order here: ${SITE_URL}/order`,
         MENU
       );
       return;
