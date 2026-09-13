@@ -226,6 +226,15 @@ const MENU = [
   { title: '🙋 Talk to a person', payload: 'MENU_HUMAN' },
 ];
 
+// Welcome card: "Place an Order" is a web_url button (opens the site
+// immediately, no round trip), the other two are postback buttons handled
+// below same as the old quick-reply menu.
+const WELCOME_BUTTONS = [
+  { type: 'web_url', url: `${SITE_URL}/order`, title: '📝 Place an Order' },
+  { type: 'postback', payload: 'MENU_PRICES', title: '💧 View Prices' },
+  { type: 'postback', payload: 'MENU_HUMAN', title: '📞 Talk to a person' },
+];
+
 // "Talk to a person" mutes the bot for this PSID so the auto-replies don't talk
 // over the owner. In-memory, best-effort — same single-instance caveat as
 // pendingLinks above; worst case the bot resumes early after a cold start.
@@ -283,12 +292,13 @@ async function handleMessage(senderPsid, messageText) {
   // Owner is handling this thread — stay quiet.
   if (inHandoff(senderPsid)) return;
 
-  await sendReply(senderPsid,
-    `👋 Hi! I'm the Anchor Drops assistant.
+  await sendButtons(senderPsid,
+    `👋 Welcome to Anchor Drops 💧
 
 ` +
-    `What can I help you with?`,
-    MENU
+    `Purified water delivered to your door.
+What can I help you with?`,
+    WELCOME_BUTTONS
   );
 }
 
@@ -323,15 +333,13 @@ ${priceList()}
     case 'GET_STARTED':
     default:
       humanHandoff.delete(senderPsid);
-      await sendReply(senderPsid,
-        `👋 Welcome to Anchor Drops!
+      await sendButtons(senderPsid,
+        `👋 Welcome to Anchor Drops 💧
 
 ` +
-        `We deliver fresh purified water right to your door.
-
-` +
-        `Pick an option below, or send your Order ID to get delivery updates here. 💧`,
-        MENU
+        `Purified water delivered to your door.
+What can I help you with?`,
+        WELCOME_BUTTONS
       );
   }
 }
@@ -393,6 +401,35 @@ async function sendButton(recipientPsid, text, button, quickReplies) {
           ...(quickReplies?.length
             ? { quick_replies: quickReplies.map((qr) => ({ content_type: 'text', title: qr.title, payload: qr.payload })) }
             : {}),
+        },
+        messaging_type: 'RESPONSE',
+      }),
+    });
+  } catch (error) {
+    console.error('Error sending Messenger button reply:', error);
+  }
+}
+
+// Multi-button card (up to 3), mixing web_url (redirects immediately) and
+// postback (routed through handlePostback, same as MENU_PRICES/MENU_HUMAN).
+async function sendButtons(recipientPsid, text, buttons) {
+  const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
+  if (!FB_PAGE_ACCESS_TOKEN) {
+    console.log('FB_PAGE_ACCESS_TOKEN not set, skipping reply');
+    return;
+  }
+
+  try {
+    await fetch('https://graph.facebook.com/v18.0/me/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FB_PAGE_ACCESS_TOKEN}` },
+      body: JSON.stringify({
+        recipient: { id: recipientPsid },
+        message: {
+          attachment: {
+            type: 'template',
+            payload: { template_type: 'button', text, buttons },
+          },
         },
         messaging_type: 'RESPONSE',
       }),
