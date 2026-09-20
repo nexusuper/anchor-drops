@@ -10,6 +10,7 @@ import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 import { STORE_HOURS_LABEL } from '@/lib/scheduling';
 import { readOrderPhone } from '@/lib/client-storage';
 import { ORDER_STATUS } from '@/lib/order-status';
+import { sizeLabel } from '@/lib/products';
 
 const DELIVERY_SLOT_LABELS = {
   pickup: 'Counter pickup',
@@ -179,7 +180,7 @@ export default function Confirmation() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Product</span>
-                  <span className="font-medium">{order.product_type} ({order.container_size})</span>
+                  <span className="font-medium">{order.product_type} ({sizeLabel(order.container_size)})</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Quantity</span>

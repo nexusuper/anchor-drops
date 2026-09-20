@@ -8,6 +8,7 @@ import RouteSignaturePad from '@/components/admin/ops/RouteSignaturePad';
 import { fetchStop, formatTime, navigateUrl, PAYMENT_METHODS, peso } from '@/components/admin/ops/RouteData';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { uuidv4 } from '@/lib/uuid';
+import { sizeLabel } from '@/lib/products';
 
 // Stop detail + Complete Delivery — web port of app/(app)/route/[orderId].tsx.
 //
@@ -271,7 +272,7 @@ function StopBody({ orderId }) {
           <div className="flex justify-between gap-3">
             <dt className="text-clay-muted">Product</dt>
             <dd className="text-clay-ink text-right">
-              {order.productName ?? order.product_type} · {order.container_size} × {order.quantity}
+              {order.productName ?? order.product_type} · {sizeLabel(order.container_size)} × {order.quantity}
             </dd>
           </div>
           <div className="flex justify-between gap-3">

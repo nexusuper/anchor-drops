@@ -38,7 +38,7 @@ export default function Rewards() {
         <h1 className="font-editorial text-4xl font-bold leading-[1.08] tracking-tight text-clay-ink">
           Earn free <span style={{ color: '#0ea5e9' }}>refills.</span>
         </h1>
-        <p className="text-clay-muted font-semibold mt-3">Earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} refills.</p>
+        <p className="text-clay-muted font-semibold mt-3">Earn a free gallon refill every {GALLONS_PER_VOUCHER} refills.</p>
       </section>
 
       <div className="max-w-lg mx-auto px-4 py-10 space-y-6">
@@ -69,7 +69,7 @@ export default function Rewards() {
               <ClayIcon name="drop" className="w-10 h-10 mx-auto mb-3 text-clay-sky" />
               <p className="font-editorial text-xl font-bold text-clay-ink mb-1">No refills counted yet</p>
               <p className="text-sm text-clay-muted font-semibold">
-                Place your first order and you&apos;ll earn a free 5-gallon refill every {GALLONS_PER_VOUCHER} refills.
+                Place your first order and you&apos;ll earn a free gallon refill every {GALLONS_PER_VOUCHER} refills.
               </p>
             </ClayCard>
             {data.containers_out != null && data.containers_out > 0 && (

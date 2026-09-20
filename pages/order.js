@@ -498,7 +498,7 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                 </span>
                 <div>
                   <p className="font-editorial font-bold text-clay-ink">You have {rewards.available} free refill{rewards.available > 1 ? 's' : ''}!</p>
-                  <p className="text-xs text-clay-muted font-semibold">Each free 5-gallon refill saves you ₱{VOUCHER_VALUE}.</p>
+                  <p className="text-xs text-clay-muted font-semibold">Each free gallon refill saves you ₱{VOUCHER_VALUE}.</p>
                 </div>
               </div>
 
