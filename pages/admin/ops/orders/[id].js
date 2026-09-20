@@ -4,6 +4,7 @@ import OpsShell from '@/components/admin/OpsShell';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
+import { sizeLabel } from '@/lib/products';
 
 // Web port of app/(app)/orders/[id].tsx — status changes, payment-verified
 // toggle, apply-reward, Messenger message. `create_order`/`apply_order_reward`
@@ -222,7 +223,7 @@ export default function OpsOrderDetailPage() {
           <ClayCard className="p-4">
             <h2 className="font-display font-bold text-clay-ink mb-2">Order items</h2>
             <Row label="Product" value={order.product_type} />
-            <Row label="Container size" value={order.container_size} />
+            <Row label="Container size" value={sizeLabel(order.container_size)} />
             <Row label="Quantity" value={order.quantity} />
             <Row label="Needs container(s)" value={order.need_container ? `Yes (${order.container_quantity})` : 'No'} />
             <Row label="Total" value={`₱${Number(order.total_amount ?? 0).toFixed(2)}`} />

@@ -15,6 +15,7 @@ import {
 } from '@/components/admin/ops/RouteData';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import { useOpsSession } from '@/lib/useOpsSession';
+import { sizeLabel } from '@/lib/products';
 
 // Today's Route — web port of the app's app/(app)/route/index.tsx.
 //
@@ -123,7 +124,7 @@ function RouteBody() {
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-clay-muted">
-                <span>{o.productName ?? o.product_type} · {o.container_size} × {o.quantity}</span>
+                <span>{o.productName ?? o.product_type} · {sizeLabel(o.container_size)} × {o.quantity}</span>
                 <span>·</span>
                 <span>{peso(o.total_amount)}</span>
               </div>
