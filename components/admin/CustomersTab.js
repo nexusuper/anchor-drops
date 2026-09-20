@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import ClayIcon from '../ui/ClayIcon';
 import { SEGMENT_DEFS } from '@/lib/segments';
 import { ORDER_STATUS_BADGE } from '@/lib/order-status';
+import { apiFetch } from '@/lib/api-client';
 
 const STATUS_COLORS = ORDER_STATUS_BADGE;
 
@@ -189,6 +190,20 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
       console.error('Failed to adjust containers:', e);
     }
     setSavingContainer(false);
+  }
+
+  async function blockCustomer() {
+    const c = selectedCustomer;
+    if (!c || !window.confirm(`Block ${c.customer_name} (${c.phone_display || c.phone_normalized})?
+
+They can no longer order online or by Messenger.`)) return;
+    try {
+      await apiFetch('/api/blocklist', { method: 'POST', password: savedPassword, body: { phone: c.phone_normalized, reason: `Customer: ${c.customer_name}` } });
+      onError?.('');
+      window.alert('Number blocked.');
+    } catch (e) {
+      onError?.(e.message);
+    }
   }
 
   async function fetchCustomerDetail(phone) {
@@ -789,6 +804,8 @@ export default function CustomersTab({ savedPassword, onError, onCountChange }) 
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div><span className="text-clay-muted">Phone:</span></div>
                       <div className="font-mono text-clay-ink">{selectedCustomer.phone_display || selectedCustomer.phone_normalized}</div>
+                      <div />
+                      <button type="button" onClick={blockCustomer} className="justify-self-start text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-3 py-1 rounded-full transition-colors">Block this number</button>
                       <div><span className="text-clay-muted">First Order:</span></div>
                       <div className="text-clay-ink">{selectedCustomer.first_order ? new Date(selectedCustomer.first_order).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</div>
                       <div><span className="text-clay-muted">Last Order:</span></div>

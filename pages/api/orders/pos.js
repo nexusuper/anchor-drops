@@ -5,6 +5,8 @@ import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID } from '@/lib/products';
 import { recordContainerMove } from '@/lib/containers';
+import { isPhoneBlocked } from '@/lib/order-guard';
+import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 
@@ -85,6 +87,11 @@ export default async function handler(req, res) {
   const totalQuantity = resolvedLines.reduce((sum, l) => sum + l.quantity, 0);
   const totalRefillSubtotal = resolvedLines.reduce((sum, l) => sum + l.refill_subtotal, 0);
   const cartDeliveryFee = 0; // delivery fee retired — pricing is all-in on the product price now
+
+  // Staff-keyed, so say why. Pickups are exempt: no rider trip to waste.
+  if (!isPickup && isPhoneBlocked(phone, await loadBlocklistSafe(supabase))) {
+    return res.status(403).json({ error: 'This number is on the blocklist. Delivery refused.' });
+  }
 
   const normPhone = normalizePhone(phone);
   // supabase-js resolves with { data: null, error } rather than throwing, so the

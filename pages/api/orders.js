@@ -11,9 +11,13 @@ import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleName, isPlausibleAddress,
   strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
+  firstOrderVerdict, isBulkFirstOrder, isPhoneBlocked,
 } from '@/lib/order-guard';
+import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
 
+// Same shape the upload below requires; Zod alone accepts a bare "data:image/x".
+const PAYMENT_PROOF_RE = /^data:image\/\w+;base64,.+/;
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 const orderRate = rateLimit({ windowMs: 60_000, max: 10 });
 
@@ -110,6 +114,26 @@ export default async function handler(req, res) {
         }
       }
 
+      // Scam flags for the admin list: `blocked` (owner blocklist) and
+      // `verify_first` (untrusted phone, bulk delivery order still awaiting
+      // dispatch). One delivered-orders query covers the whole page.
+      const keysByRow = (rows || []).map((o) => phoneVariants(o.phone));
+      const allKeys = [...new Set(keysByRow.flat())];
+      const [blockedList, { data: deliveredRows }] = await Promise.all([
+        loadBlocklistSafe(supabase),
+        allKeys.length
+          ? supabase.from('orders').select('phone_normalized').eq('status', 'delivered').in('phone_normalized', allKeys)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const deliveredKeys = new Set((deliveredRows || []).map((r) => r.phone_normalized));
+      (rows || []).forEach((o, i) => {
+        const trusted = keysByRow[i].some((k) => deliveredKeys.has(k));
+        o.blocked = isPhoneBlocked(o.phone, blockedList);
+        // Phone-in orders keyed at the POS are included on purpose: that is the
+        // channel the fake-caller scam arrives on. POS pickups are born delivered.
+        o.verify_first = ['pending', 'confirmed'].includes(o.status) && isBulkFirstOrder(trusted, o.quantity);
+      });
+
       return res.status(200).json({
         orders: rows,
         total: total ?? 0,
@@ -205,6 +229,13 @@ export default async function handler(req, res) {
     // "0917..." are two different rows and a single-key lookup would let a
     // blocked number back in just by switching format. See phoneVariants().
     const phoneKeys = phoneVariants(phone);
+
+    // Owner-maintained blocklist (scam / repeat no-show numbers). Same status and
+    // message as the strike rejection so a blocked number learns nothing.
+    if (isPhoneBlocked(phone, await loadBlocklistSafe(supabase))) {
+      return res.status(403).json({ error: ORDER_REFUSED_MESSAGE });
+    }
+
     const { count: strikes, error: strikeErr } = await supabase
       .from('orders')
       .select('id', { count: 'exact', head: true })
@@ -227,8 +258,14 @@ export default async function handler(req, res) {
       .in('phone_normalized', phoneKeys)
       .order('created_at', { ascending: false })
       .limit(20);
+    // A failed history lookup counts as trusted: fail open, never block on an outage.
+    const trusted = !!historyErr || (history || []).some((o) => o.status === 'delivered');
+    // Store pickups send no rider, so there is no trip to waste.
+    const firstOrder = firstOrderVerdict({
+      trusted, quantity: storePickup ? 0 : quantity, paymentMethod: payment_method, hasScreenshot: PAYMENT_PROOF_RE.test(payment_screenshot || ''),
+    });
+    if (!firstOrder.ok) return res.status(403).json({ error: firstOrder.error });
     if (!historyErr && history && history.length > 0) {
-      const trusted = history.some((o) => o.status === 'delivered');
       if (!trusted) {
         const since = Date.now() - NEW_PHONE_WINDOW_MS;
         const recent = history.filter((o) => new Date(o.created_at).getTime() >= since).length;

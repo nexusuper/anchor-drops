@@ -17,6 +17,7 @@ import { SEGMENT_DEFS } from '@/lib/segments';
 import { apiFetch } from '@/lib/api-client';
 import { ORDER_STATUS_BADGE } from '@/lib/order-status';
 import { VOUCHER_VALUE } from '@/lib/loyalty';
+import { buildStatusMessage } from '@/lib/notifications';
 
 const NOTIFIABLE_STATUSES = ['confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
 const DELETABLE_STATUSES = ['delivered', 'cancelled'];
@@ -108,6 +109,7 @@ export default function AdminPanel() {
   const [updating, setUpdating] = useState(null);
   const [notifyModal, setNotifyModal] = useState(null);
   const [notifying, setNotifying] = useState(null);
+  const [messengerModal, setMessengerModal] = useState(null);
   const [messengerNotifying, setMessengerNotifying] = useState(null);
   const [messengerResult, setMessengerResult] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
@@ -279,7 +281,20 @@ export default function AdminPanel() {
     });
   }
 
+  // Dispatch gate for first-time bulk orders (the fake-caller scam): the rider
+  // only leaves after staff confirm the order is real.
   async function updateStatus(id, status) {
+    const order = orders.find((o) => o.id === id);
+    if (order?.blocked && status !== 'cancelled' && !window.confirm(`${order.phone} is on the BLOCKLIST. Continue anyway?`)) return;
+    if (order?.verify_first && status === 'out_for_delivery' && !window.confirm(
+      `FIRST-TIME ORDER: ${order.quantity} gallons from ${order.phone}.
+
+Before the rider leaves:
+- Called or messaged the customer back?
+- Got a landmark / house photo?
+- Payment received (GCash) or customer verified?
+
+Dispatch now?`)) return;
     setUpdating(id);
     await withErrorBanner(async () => {
       await apiFetch('/api/orders/' + id, { method: 'PATCH', password: savedPassword, body: { status } });
@@ -303,6 +318,16 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
     setUpdating(null);
   }
 
+  async function blockPhone(order) {
+    if (!window.confirm(`Block ${order.phone}?
+
+They can no longer order online or by Messenger, and staff get a warning when keying a delivery for them.`)) return;
+    await withErrorBanner(async () => {
+      await apiFetch('/api/blocklist', { method: 'POST', password: savedPassword, body: { phone: order.phone, reason: `Order ${order.order_number || order.id}` } });
+      await fetchOrders();
+    });
+  }
+
   async function notifyCustomer(orderId, status) {
     setNotifying(orderId);
     const res = await fetch('/api/notify', {
@@ -314,14 +339,23 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
     setNotifying(null);
   }
 
-  async function notifyViaMessenger(orderId, status) {
+  function openMessengerModal(order) {
+    setMessengerModal({
+      orderId: order.id,
+      status: order.status,
+      message: buildStatusMessage(order, order.status, 'messenger'),
+    });
+  }
+
+  async function sendMessengerModal() {
+    const { orderId, status, message } = messengerModal;
     setMessengerNotifying(orderId);
     setMessengerResult(null);
     try {
       const res = await fetch('/api/messenger-notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', password: savedPassword },
-        body: JSON.stringify({ orderId, status }),
+        body: JSON.stringify({ orderId, status, message }),
       });
       const data = await res.json();
       setMessengerResult(data);
@@ -329,6 +363,7 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
       setMessengerResult({ error: 'Network error' });
     }
     setMessengerNotifying(null);
+    setMessengerModal(null);
   }
 
   async function deleteOrder(id) {
@@ -598,6 +633,30 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
             </div>
           )}
 
+          {/* Messenger Send Modal */}
+          {messengerModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+              <div className="clay-raised rounded-3xl p-6 max-w-md w-full">
+                <h2 className="text-lg font-bold text-sky-800 mb-1"><ClayIcon name="chat" className="w-5 h-5 inline mr-1" /> Send Messenger Update</h2>
+                <p className="text-sm text-gray-500 mb-3">Edit if needed, then send:</p>
+                <textarea
+                  value={messengerModal.message}
+                  onChange={(e) => setMessengerModal({ ...messengerModal, message: e.target.value })}
+                  rows={6}
+                  className="clay-input w-full text-sm mb-4 resize-none"
+                />
+                <div className="flex gap-2">
+                  <button onClick={() => setMessengerModal(null)} className="flex-1 border border-sky-300 text-sky-600 font-semibold py-2 rounded-full hover:bg-sky-50 transition-colors text-sm">
+                    Cancel
+                  </button>
+                  <button onClick={sendMessengerModal} disabled={messengerNotifying === messengerModal.orderId || !messengerModal.message.trim()} className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 rounded-full transition-colors text-sm disabled:opacity-50">
+                    {messengerNotifying === messengerModal.orderId ? 'Sending...' : 'Send'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* New Order Alert */}
           {newOrderCount > 0 && (
             <div className="fixed top-4 right-4 z-50">
@@ -736,6 +795,8 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
                               {o.sale_channel === 'pos' && (
                                 <span className="text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">Counter Sale</span>
                               )}
+                              {o.blocked && <span className="text-[10px] font-bold bg-red-100 text-red-700 rounded-full px-1.5 py-0.5">BLOCKED</span>}
+                              {o.verify_first && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5" title="First-time customer, bulk order. Verify before dispatch.">VERIFY</span>}
                             </div>
                             <div className="text-gray-400 text-xs">{o.phone}</div>
                           </td>
@@ -811,11 +872,16 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
                                     {notifying === o.id ? '...' : <ClayIcon name="mobile" className="w-4 h-4" />}
                                   </button>
                                   {o.messenger_psid && (
-                                    <button onClick={() => notifyViaMessenger(o.id, o.status)} disabled={messengerNotifying === o.id} title="Send via Messenger" aria-label="Send via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                                    <button onClick={() => openMessengerModal(o)} disabled={messengerNotifying === o.id} title="Message via Messenger" aria-label="Message via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
                                       {messengerNotifying === o.id ? '...' : <ClayIcon name="chat" className="w-4 h-4" />}
                                     </button>
                                   )}
                                 </>
+                              )}
+                              {!o.blocked && (
+                                <button onClick={() => blockPhone(o)} title="Block this number" aria-label="Block this number" className="text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                                  Block
+                                </button>
                               )}
                               {NO_SHOW_STATUSES.includes(o.status) && !o.no_show && (
                                 <button onClick={() => markNoShow(o)} disabled={updating === o.id} title="Mark as no show" aria-label="Mark as no show" className="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
@@ -851,6 +917,8 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
                         {o.sale_channel === 'pos' && (
                           <span className="text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">Counter Sale</span>
                         )}
+                        {o.blocked && <span className="text-[10px] font-bold bg-red-100 text-red-700 rounded-full px-1.5 py-0.5">BLOCKED</span>}
+                        {o.verify_first && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5" title="First-time customer, bulk order. Verify before dispatch.">VERIFY</span>}
                       </div>
                       <div className="text-xs text-gray-400">{o.phone} · {o.barangay}</div>
                       <div className="text-xs text-gray-400 truncate">{o.address}</div>
@@ -893,6 +961,16 @@ This cancels the order and counts a strike against ${order.phone}. After 2 strik
                         {NOTIFIABLE_STATUSES.includes(o.status) && (
                           <button onClick={() => notifyCustomer(o.id, o.status)} disabled={notifying === o.id} title="Copy SMS message" aria-label="Copy SMS message" className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
                             {notifying === o.id ? '...' : <ClayIcon name="mobile" className="w-4 h-4" />}
+                          </button>
+                        )}
+                        {NOTIFIABLE_STATUSES.includes(o.status) && o.messenger_psid && (
+                          <button onClick={() => openMessengerModal(o)} disabled={messengerNotifying === o.id} title="Message via Messenger" aria-label="Message via Messenger" className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold px-2 py-1 rounded-full transition-colors disabled:opacity-50">
+                            {messengerNotifying === o.id ? '...' : <ClayIcon name="chat" className="w-4 h-4" />}
+                          </button>
+                        )}
+                        {!o.blocked && (
+                          <button onClick={() => blockPhone(o)} title="Block this number" aria-label="Block this number" className="text-xs bg-red-100 hover:bg-red-200 text-red-700 font-semibold px-2 py-1 rounded-full transition-colors">
+                            Block
                           </button>
                         )}
                         {NO_SHOW_STATUSES.includes(o.status) && !o.no_show && (

@@ -11,6 +11,7 @@ const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 const BodySchema = z.object({
   orderId: z.string().uuid(),
   status: z.enum(['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled']),
+  message: z.string().min(1).max(2000).optional(),
 });
 
 export default async function handler(req, res) {
@@ -20,7 +21,7 @@ export default async function handler(req, res) {
 
   const parsed = BodySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid request' });
-  const { orderId, status } = parsed.data;
+  const { orderId, status, message: override } = parsed.data;
 
   const supabase = getSupabase();
   const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
   if (!order.messenger_psid) return res.status(400).json({ error: 'No Messenger account linked to this order' });
 
   try {
-    const text = buildStatusMessage(order, status, 'messenger');
+    const text = override || buildStatusMessage(order, status, 'messenger');
     await sendMessengerMessage(order.messenger_psid, text);
     await supabase.from('contact_log').insert({
       branch_id: DEFAULT_BRANCH_ID, phone_normalized: normalizePhone(order.phone),
