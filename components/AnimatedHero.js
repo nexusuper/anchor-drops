@@ -12,9 +12,9 @@ export default function AnimatedHero() {
           </div>
 
           <h1 className="font-editorial text-5xl md:text-[4.5rem] font-bold leading-[1.04] tracking-tight text-clay-ink">
-            Skip the Call.{' '}
-            <span style={{ color: '#0ea5e9' }}>Order Water</span>
-            <br />Online.
+            Skip the Call.
+            <br />
+            <span style={{ color: '#0ea5e9' }}>Order Water Online.</span>
           </h1>
 
           <p className="text-clay-muted text-lg font-semibold leading-relaxed max-w-[50ch]">
