@@ -7,7 +7,7 @@ import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleAddress,
   strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
-  firstOrderVerdict, isPhoneBlocked,
+  firstOrderVerdict, isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE,
 } from '@/lib/order-guard';
 import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
@@ -96,6 +96,10 @@ export default async function handler(req, res) {
   const product = PRODUCTS_BY_ID[productKey];
   const perContainer = product.size === '3-Gal' ? 3 : 5;
   const quantity = Math.max(1, Math.round(gallons / perContainer));
+  // Always a delivery (see productKey above), so the minimum always applies.
+  if (!meetsDeliveryMinimum(false, quantity)) {
+    return res.status(400).json({ error: DELIVERY_MIN_MESSAGE });
+  }
   const notes =
     `Ordered via Facebook Messenger (${gallons} gal requested)` +
     (b.notes ? ` — ${b.notes}` : '');

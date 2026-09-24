@@ -11,7 +11,7 @@ import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleName, isPlausibleAddress,
   strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
-  firstOrderVerdict, isBulkFirstOrder, isPhoneBlocked,
+  firstOrderVerdict, isBulkFirstOrder, isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE,
 } from '@/lib/order-guard';
 import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
@@ -182,6 +182,9 @@ export default async function handler(req, res) {
     // Store pickup: no address is collected, and no delivery/container-pickup
     // run is scheduled — the chosen slot is when the customer comes to the store.
     const storePickup = product.fulfillment === 'pickup';
+    if (!meetsDeliveryMinimum(storePickup, quantity)) {
+      return res.status(400).json({ error: DELIVERY_MIN_MESSAGE });
+    }
     let orderAddress = STORE_PICKUP_ADDRESS;
     let canonicalBarangay = STORE_PICKUP_BARANGAY;
     if (!storePickup) {
