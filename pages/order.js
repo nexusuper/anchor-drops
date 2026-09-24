@@ -1,5 +1,5 @@
 import Layout from '@/components/Layout';
-import { FIRST_ORDER_PREPAY_MIN_QTY } from '@/lib/order-guard';
+import { FIRST_ORDER_PREPAY_MIN_QTY, MIN_DELIVERY_QTY, DELIVERY_MIN_MESSAGE } from '@/lib/order-guard';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
@@ -235,6 +235,7 @@ function OrderForm({ activeSkus, openOverrideDates }) {
   // barangay, no map pin, no container-pickup run — the one date/time the
   // customer picks is when they come to the store.
   const storePickup = selectedProduct.fulfillment === 'pickup';
+  const minQty = storePickup ? 1 : MIN_DELIVERY_QTY;
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
   const baseTotal = refillTotal + containerTotal;
@@ -292,6 +293,12 @@ function OrderForm({ activeSkus, openOverrideDates }) {
       pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '',
     }));
   }, [storePickup]);
+
+  // Delivery has a minimum refill count (lib/order-guard.js); lift the count to
+  // it on load and when switching from a store-pickup product.
+  useEffect(() => {
+    if (form.quantity < minQty) queueMicrotask(() => setForm((f) => ({ ...f, quantity: Math.max(f.quantity, minQty) })));
+  }, [form.quantity, minQty]);
 
   // Default the delivery date to the earliest allowed day whenever the pickup
   // slot changes. Morning pickup locks to that same day; afternoon pickup only
@@ -359,6 +366,10 @@ function OrderForm({ activeSkus, openOverrideDates }) {
     setError('');
     if (!isPhMobile(form.phone)) {
       setError('Please enter a valid PH mobile number (09XX-XXX-XXXX).');
+      return;
+    }
+    if (form.quantity < minQty) {
+      setError(DELIVERY_MIN_MESSAGE);
       return;
     }
     if (!storePickup && !matchBarangay(form.barangay)) {
@@ -593,10 +604,11 @@ function OrderForm({ activeSkus, openOverrideDates }) {
               <div>
                 <label htmlFor="quantity" className="block text-sm font-medium text-clay-ink2 mb-1">Quantity (refills) *</label>
                 <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => set('quantity', Math.max(1, form.quantity - 1))} disabled={form.quantity <= 1} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label="Fewer refills">−</button>
-                  <input id="quantity" type="number" min="1" max="50" required value={form.quantity} onChange={(e) => set('quantity', Math.min(50, Math.max(1, parseInt(e.target.value) || 1)))} className="clay-input text-center" />
+                  <button type="button" onClick={() => set('quantity', Math.max(minQty, form.quantity - 1))} disabled={form.quantity <= minQty} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label="Fewer refills">−</button>
+                  <input id="quantity" type="number" min={minQty} max="50" required value={form.quantity} onChange={(e) => set('quantity', Math.min(50, Math.max(minQty, parseInt(e.target.value) || minQty)))} className="clay-input text-center" />
                   <button type="button" onClick={() => set('quantity', Math.min(50, form.quantity + 1))} disabled={form.quantity >= 50} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label="More refills">+</button>
                 </div>
+                {!storePickup && <p className="text-xs text-clay-muted font-semibold mt-1">{DELIVERY_MIN_MESSAGE}</p>}
               </div>
 
               <div>

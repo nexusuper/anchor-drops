@@ -95,3 +95,13 @@ assert.equal(isPhoneBlocked('09180000000', list), false);
 assert.equal(isPhoneBlocked('aaaaaaa', list), false);
 
 console.log('order-guard: prepay + blocklist assertions passed');
+
+// --- delivery minimum ----------------------------------------------------
+import { meetsDeliveryMinimum, MIN_DELIVERY_QTY } from '../lib/order-guard.js';
+
+assert.equal(MIN_DELIVERY_QTY, 2);
+assert.equal(meetsDeliveryMinimum(false, 1), false, 'delivery of 1 refill refused');
+assert.equal(meetsDeliveryMinimum(false, 2), true, 'delivery of 2 refills allowed');
+assert.equal(meetsDeliveryMinimum(true, 1), true, 'store pickup of 1 refill allowed');
+
+console.log('order-guard: delivery minimum assertions passed');

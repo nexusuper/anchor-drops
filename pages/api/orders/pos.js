@@ -5,7 +5,7 @@ import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
 import { PRODUCTS_BY_ID } from '@/lib/products';
 import { recordContainerMove } from '@/lib/containers';
-import { isPhoneBlocked } from '@/lib/order-guard';
+import { isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE } from '@/lib/order-guard';
 import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
 import crypto from 'node:crypto';
@@ -87,6 +87,10 @@ export default async function handler(req, res) {
   const totalQuantity = resolvedLines.reduce((sum, l) => sum + l.quantity, 0);
   const totalRefillSubtotal = resolvedLines.reduce((sum, l) => sum + l.refill_subtotal, 0);
   const cartDeliveryFee = 0; // delivery fee retired — pricing is all-in on the product price now
+
+  if (!meetsDeliveryMinimum(isPickup, totalQuantity)) {
+    return res.status(400).json({ error: DELIVERY_MIN_MESSAGE });
+  }
 
   // Staff-keyed, so say why. Pickups are exempt: no rider trip to waste.
   if (!isPickup && isPhoneBlocked(phone, await loadBlocklistSafe(supabase))) {
