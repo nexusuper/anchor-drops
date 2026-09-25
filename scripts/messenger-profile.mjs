@@ -30,8 +30,8 @@ const profile = {
       locale: 'default',
       composer_input_disabled: false,
       call_to_actions: [
-        { type: 'postback', title: '🛒 Order water', payload: 'MENU_ORDER' },
         { type: 'postback', title: '💰 Prices', payload: 'MENU_PRICES' },
+        { type: 'postback', title: '🛒 Order now', payload: 'MENU_ORDER' },
         { type: 'postback', title: '🙋 Talk to a person', payload: 'MENU_HUMAN' },
         { type: 'web_url', title: '🌐 Website', url: SITE_URL, webview_height_ratio: 'full' },
       ],

@@ -220,11 +220,38 @@ async function requestOrConfirmLink(senderPsid, ref, phoneInSameMessage) {
   return 'pending';
 }
 
+// Quick-reply bubbles above the composer. Attached to every bot message by the
+// send helpers below, so the three choices are always one tap away. Meta clears
+// them once the customer types; the persistent menu (scripts/messenger-profile.mjs)
+// is the always-on fallback.
 const MENU = [
-  { title: '🛒 Order water', payload: 'MENU_ORDER' },
   { title: '💰 Prices', payload: 'MENU_PRICES' },
+  { title: '🛒 Order now', payload: 'MENU_ORDER' },
   { title: '🙋 Talk to a person', payload: 'MENU_HUMAN' },
 ];
+const QUICK_REPLIES = MENU.map((qr) => ({ content_type: 'text', title: qr.title, payload: qr.payload }));
+
+// The automatic welcome card goes out at most twice per PSID, ever. Counted in
+// the DB (claim_messenger_welcome, anchor-drops-system migration 0049) because
+// an in-memory count resets on every cold start. Fails closed: on any DB error
+// the card is skipped rather than risk spamming.
+async function sendWelcome(senderPsid) {
+  try {
+    const { data, error } = await getSupabase().rpc('claim_messenger_welcome', { p_psid: senderPsid });
+    if (error || data !== true) return;
+  } catch (err) {
+    console.error('claim_messenger_welcome failed:', err);
+    return;
+  }
+  await sendButtons(senderPsid,
+    `👋 Welcome to Anchor Drops 💧
+
+` +
+    `Purified water delivered to your door.
+What can I help you with?`,
+    WELCOME_BUTTONS
+  );
+}
 
 // Welcome card: "Place an Order" is a web_url button (opens the site
 // immediately, no round trip), the other two are postback buttons handled
@@ -277,13 +304,11 @@ async function handleMessage(senderPsid, messageText) {
         `❌ Sorry, I couldn't find order #${orderRef.value}.
 
 ` +
-        `Please double-check the Order ID from your confirmation page and try again.`,
-        MENU
+        `Please double-check the Order ID from your confirmation page and try again.`
       );
     } else if (result === 'pending') {
       await sendReply(senderPsid,
-        `To confirm this is your order, please also send the phone number used to place it.`,
-        MENU
+        `To confirm this is your order, please also send the phone number used to place it.`
       );
     }
     return;
@@ -292,14 +317,7 @@ async function handleMessage(senderPsid, messageText) {
   // Owner is handling this thread — stay quiet.
   if (inHandoff(senderPsid)) return;
 
-  await sendButtons(senderPsid,
-    `👋 Welcome to Anchor Drops 💧
-
-` +
-    `Purified water delivered to your door.
-What can I help you with?`,
-    WELCOME_BUTTONS
-  );
+  await sendWelcome(senderPsid);
 }
 
 async function handlePostback(senderPsid, payload) {
@@ -308,8 +326,7 @@ async function handlePostback(senderPsid, payload) {
       humanHandoff.delete(senderPsid);
       await sendButton(senderPsid,
         `🛒 Tap below to order — after you place it, send me your Order ID and I'll post delivery updates in this chat. 💧`,
-        { title: '🌐 Go to order page', url: `${SITE_URL}/order` },
-        MENU
+        { title: '🌐 Go to order page', url: `${SITE_URL}/order` }
       );
       return;
     case 'MENU_PRICES':
@@ -319,32 +336,23 @@ async function handlePostback(senderPsid, payload) {
 ${priceList()}
 
 ` +
-        `Order here: ${SITE_URL}/order`,
-        MENU
+        `Order here: ${SITE_URL}/order`
       );
       return;
     case 'MENU_HUMAN':
       humanHandoff.set(senderPsid, Date.now() + HANDOFF_TTL_MS);
       await sendReply(senderPsid,
-        `🙋 Got it — leave your message here and someone from our team will reach out to you shortly.`,
-        MENU
+        `🙋 Got it — leave your message here and someone from our team will reach out to you shortly.`
       );
       return;
     case 'GET_STARTED':
     default:
       humanHandoff.delete(senderPsid);
-      await sendButtons(senderPsid,
-        `👋 Welcome to Anchor Drops 💧
-
-` +
-        `Purified water delivered to your door.
-What can I help you with?`,
-        WELCOME_BUTTONS
-      );
+      await sendWelcome(senderPsid);
   }
 }
 
-async function sendReply(recipientPsid, messageText, quickReplies) {
+async function sendReply(recipientPsid, messageText) {
   const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
   if (!FB_PAGE_ACCESS_TOKEN) {
     console.log('FB_PAGE_ACCESS_TOKEN not set, skipping reply');
@@ -359,9 +367,7 @@ async function sendReply(recipientPsid, messageText, quickReplies) {
         recipient: { id: recipientPsid },
         message: {
           text: messageText,
-          ...(quickReplies?.length
-            ? { quick_replies: quickReplies.map((qr) => ({ content_type: 'text', title: qr.title, payload: qr.payload })) }
-            : {}),
+          quick_replies: QUICK_REPLIES,
         },
         // Always a reply to an inbound message, so the 24h window is open and no
         // MESSAGE_TAG (which needs unapproved App Review) is needed.
@@ -376,7 +382,7 @@ async function sendReply(recipientPsid, messageText, quickReplies) {
 // Button template with a web_url button opens the site directly in the in-app
 // browser (or system browser) on tap — a real redirect, not a pasted link the
 // customer has to tap out of the text themselves.
-async function sendButton(recipientPsid, text, button, quickReplies) {
+async function sendButton(recipientPsid, text, button) {
   const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
   if (!FB_PAGE_ACCESS_TOKEN) {
     console.log('FB_PAGE_ACCESS_TOKEN not set, skipping reply');
@@ -398,9 +404,7 @@ async function sendButton(recipientPsid, text, button, quickReplies) {
               buttons: [{ type: 'web_url', url: button.url, title: button.title }],
             },
           },
-          ...(quickReplies?.length
-            ? { quick_replies: quickReplies.map((qr) => ({ content_type: 'text', title: qr.title, payload: qr.payload })) }
-            : {}),
+          quick_replies: QUICK_REPLIES,
         },
         messaging_type: 'RESPONSE',
       }),
@@ -430,6 +434,7 @@ async function sendButtons(recipientPsid, text, buttons) {
             type: 'template',
             payload: { template_type: 'button', text, buttons },
           },
+          quick_replies: QUICK_REPLIES,
         },
         messaging_type: 'RESPONSE',
       }),

@@ -24,6 +24,7 @@ No test framework is configured. `scripts/` has a couple of plain-Node assertion
 ```bash
 node scripts/loyalty.test.mjs
 node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
+node scripts/messenger-welcome-cap.test.mjs
 ```
 
 ## Architecture
