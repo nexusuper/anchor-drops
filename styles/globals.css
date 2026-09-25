@@ -125,75 +125,20 @@ h1, h2, h3, .font-display {
     0 0 0 2px var(--color-clay-sky);
 }
 
-/* ---------- Hero animations ---------- */
-.hero-shimmer {
-  position: absolute;
-  inset: -40% -10% auto;
-  height: 120%;
-  pointer-events: none;
-  background: radial-gradient(60% 50% at 30% 0%, rgba(255,255,255,0.35), transparent 70%);
-  animation: shimmer 7s ease-in-out infinite;
-}
-@keyframes shimmer { 0%,100% { transform: translateX(-6%); } 50% { transform: translateX(6%); } }
-
-.hero-drop { animation: bob 3.2s ease-in-out infinite; filter: drop-shadow(0 12px 16px rgba(2,80,120,0.4)); }
-@keyframes bob { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-12px) scale(1.04); } }
-
-.hero-droplet {
-  position: absolute; left: 50%; top: 96px; width: 9px; height: 13px; margin-left: -4.5px;
-  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-  background: linear-gradient(#eaf9ff, #bae6fd);
-  animation: fall 3.2s ease-in infinite; opacity: 0;
-}
-@keyframes fall { 0%,60% { transform: translateY(0); opacity: 0; } 70% { opacity: 1; } 100% { transform: translateY(70px); opacity: 0; } }
-
-.hero-ripple {
-  position: absolute; left: 50%; top: 168px; width: 30px; height: 9px; margin-left: -15px;
-  border: 2px solid rgba(255,255,255,0.6); border-radius: 50%; transform: scale(0);
-  animation: rip 3.2s ease-out infinite;
-}
-@keyframes rip { 0%,72% { transform: scale(0); opacity: 0; } 78% { opacity: 0.9; } 100% { transform: scale(2.4); opacity: 0; } }
-
-.hero-bubble {
-  position: absolute; bottom: 30px; border-radius: 50%;
-  background: rgba(255,255,255,0.45); box-shadow: inset 2px 2px 3px rgba(255,255,255,0.8);
-  animation: rise linear infinite;
-}
-@keyframes rise { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: 0.7; } 100% { transform: translateY(-260px); opacity: 0; } }
-
-.hero-wave { position: absolute; bottom: 0; width: 200%; height: 100%; }
-.hero-wave-1 { animation: waveslide 9s linear infinite; opacity: 0.5; }
-.hero-wave-2 { animation: waveslide 6s linear infinite reverse; opacity: 0.7; }
-@keyframes waveslide { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-
-/* ---------- Purification pipeline animations ---------- */
-.purify-fill {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 64%;
-  background: linear-gradient(#7dd3fc, #0ea5e9); opacity: 0.35; z-index: 1;
-  animation: slosh 3s ease-in-out infinite;
-}
-@keyframes slosh { 0%,100% { height: 60%; } 50% { height: 70%; } }
-.purify-pipe::after {
-  content: ""; position: absolute; inset: 0;
+/* ---------- Purification pipeline (fill levels are scroll-driven: components/PurifyProcess.js) ---------- */
+.purify-stripes {
+  position: absolute; top: 0; bottom: 0; left: -16px; right: 0;
   background: repeating-linear-gradient(90deg, #38bdf8 0 8px, transparent 8px 16px);
   animation: flow 0.7s linear infinite; opacity: 0.85;
 }
-@keyframes flow { from { background-position: 0 0; } to { background-position: 16px 0; } }
+@keyframes flow { to { transform: translateX(16px); } }
 .purify-uv { animation: uvpulse 1.6s ease-in-out infinite; }
 @keyframes uvpulse {
   0%,100% { box-shadow: 6px 6px 13px #c2dbeb, -6px -6px 13px #fff, inset 0 0 8px #a78bfa; }
   50% { box-shadow: 6px 6px 13px #c2dbeb, -6px -6px 13px #fff, inset 0 0 22px #8b5cf6; }
 }
-.purify-bottlefill { animation: fillup 4s ease-in-out infinite; }
-@keyframes fillup { 0% { height: 8%; } 45% { height: 88%; } 55% { height: 88%; } 100% { height: 8%; } }
-
 @media (prefers-reduced-motion: reduce) {
-  .hero-shimmer, .hero-drop, .hero-droplet, .hero-ripple, .hero-bubble,
-  .hero-wave-1, .hero-wave-2, .purify-fill, .purify-pipe::after, .purify-uv {
-    animation: none;
-  }
-  .hero-droplet, .hero-ripple { opacity: 0; }
-  .purify-bottlefill { animation: none; height: 80%; }
+  .purify-stripes, .purify-uv { animation: none; }
 }
 
 /* ---------- Inline loading spinner (used by ClayButton) ---------- */

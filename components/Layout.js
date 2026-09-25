@@ -5,7 +5,9 @@ import { canonicalFor } from '@/lib/seo';
 
 const DESCRIPTION = 'Order fresh purified water refills delivered to your door. No login required.';
 
-export default function Layout({ children, title = 'Anchor Drops — Pure Water Delivery' }) {
+// `background`: optional fixed decorative layer (z-index -1). `isolate` keeps it above
+// this wrapper's own background instead of behind it.
+export default function Layout({ children, title = 'Anchor Drops — Pure Water Delivery', background = null }) {
   return (
     <>
       <Head>
@@ -24,7 +26,8 @@ export default function Layout({ children, title = 'Anchor Drops — Pure Water 
         <meta name="twitter:description" content={DESCRIPTION} />
         <meta name="twitter:image" content={canonicalFor('/og-image.png')} />
       </Head>
-      <div className="min-h-screen flex flex-col bg-clay-bg">
+      <div className={`min-h-screen flex flex-col bg-clay-bg${background ? ' isolate' : ''}`}>
+        {background}
         <a href="#main" className="skip-link">Skip to content</a>
         <Navbar />
         <main id="main" className="flex-1">{children}</main>
