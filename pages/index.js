@@ -1,6 +1,7 @@
 import Layout from '@/components/Layout';
 import AnimatedHero from '@/components/AnimatedHero';
 import PurifyProcess from '@/components/PurifyProcess';
+import WaterBackground from '@/components/water/WaterBackground';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
@@ -49,7 +50,7 @@ export default function Home() {
   const visibleProducts = activeSkus ? PRODUCTS.filter((p) => activeSkus.includes(p.id)) : PRODUCTS;
 
   return (
-    <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded">
+    <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded" background={<WaterBackground />}>
       <AnimatedHero />
 
       {/* Stats highlights */}
@@ -73,7 +74,7 @@ export default function Home() {
         {/* Trust badges */}
         <div className="reveal flex flex-wrap justify-center gap-x-6 gap-y-2 mt-8">
           {['DTI Registered', 'Bacteriological / Water Quality Tested', 'Sanitary Permit & Compliance', 'Accepts COD, GCASH, Bank Transfer'].map((t) => (
-            <span key={t} className="inline-flex items-center gap-1.5 text-sm font-bold text-clay-ink2">
+            <span key={t} className="inline-flex items-center gap-1.5 text-sm font-bold text-clay-ink">
               <ClayIcon name="check" className="w-4 h-4 text-clay-skydeep" /> {t}
             </span>
           ))}
@@ -85,14 +86,14 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-14 items-start">
           {/* Sticky heading column */}
           <div className="reveal lg:sticky lg:top-28">
-            <span className="section-pill mb-5 inline-block">Why Anchor Drops</span>
+            <span className="section-pill text-clay-ink! mb-5 inline-block">Why Anchor Drops</span>
             <h2 className="font-editorial text-4xl md:text-5xl font-bold text-clay-ink leading-[1.08] mb-4">
               Convenience,<br />built in.
             </h2>
-            <p className="text-clay-muted font-semibold text-base leading-relaxed max-w-[42ch]">
+            <p className="text-clay-ink font-semibold text-base leading-relaxed max-w-[42ch]">
               Pick your own pickup and delivery window, check your order status anytime, and let free refill vouchers stack up on their own.
             </p>
-            <ul className="mt-6 space-y-2.5 text-base font-bold text-clay-skydeep">
+            <ul className="mt-6 space-y-2.5 text-base font-bold text-clay-ink">
               <li>💧 Safe &amp; Purified</li>
               <li>🚚 Fast Delivery</li>
               <li>💙 Friendly Service</li>
@@ -129,7 +130,7 @@ export default function Home() {
       {/* Our Products */}
       <section className="max-w-6xl mx-auto px-4 py-16">
         <div className="reveal mb-10">
-          <span className="section-pill mb-4 inline-block">Our Products</span>
+          <span className="section-pill text-clay-ink! mb-4 inline-block">Our Products</span>
           <h2 className="font-editorial text-4xl md:text-5xl font-bold text-clay-ink leading-[1.08]">
             Affordable, premium water.
           </h2>

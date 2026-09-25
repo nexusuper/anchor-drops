@@ -1,0 +1,15 @@
+{
+  "name": "anchor-drops-motion-lab",
+  "private": true,
+  "description": "Remotion preview workspace for the homepage water background. Never shipped: the site imports only components/water/*.",
+  "scripts": {
+    "studio": "remotion studio",
+    "still": "remotion still"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.484",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.484"
+  }
+}
