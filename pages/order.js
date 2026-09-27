@@ -236,6 +236,11 @@ function OrderForm({ activeSkus, openOverrideDates }) {
   // customer picks is when they come to the store.
   const storePickup = selectedProduct.fulfillment === 'pickup';
   const minQty = storePickup ? 1 : MIN_DELIVERY_QTY;
+  // The first-order prepay rule (lib/order-guard.js) is enforced server-side on
+  // whether the phone has a delivered order, which this page must not learn.
+  // So it can only warn: a returning customer may still pay cash.
+  const prepayMayApply = !storePickup && form.quantity >= FIRST_ORDER_PREPAY_MIN_QTY;
+  const prepayMissing = prepayMayApply && (form.payment_method === 'cod' || !form.payment_screenshot);
   const refillTotal = selectedProduct.refill * form.quantity;
   const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
   const baseTotal = refillTotal + containerTotal;
@@ -657,9 +662,15 @@ function OrderForm({ activeSkus, openOverrideDates }) {
             </div>
 
             {!storePickup && (
-              <p className="mt-3 text-xs text-clay-muted">
-                New customers ordering {FIRST_ORDER_PREPAY_MIN_QTY} or more gallons: please pay by GCash / Bank Transfer and attach your payment screenshot.
-              </p>
+              prepayMissing ? (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800" role="note">
+                  First order with us? Orders of {FIRST_ORDER_PREPAY_MIN_QTY} or more gallons need GCash / Bank Transfer payment with your payment screenshot attached. Returning customers can still pay cash.
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-clay-muted">
+                  New customers ordering {FIRST_ORDER_PREPAY_MIN_QTY} or more gallons: please pay by GCash / Bank Transfer and attach your payment screenshot.
+                </p>
+              )
             )}
 
             {form.payment_method === 'gcash' && (
@@ -679,7 +690,7 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                   <input id="reference_number" value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} className="clay-input" placeholder="Optional, fill after sending" />
                 </div>
                 <div>
-                  <label htmlFor="payment_screenshot" className="block text-sm font-medium text-clay-ink2 mb-1">Attach Screenshot of Payment (optional)</label>
+                  <label htmlFor="payment_screenshot" className="block text-sm font-medium text-clay-ink2 mb-1">Attach Screenshot of Payment {prepayMayApply ? `(required for new customers ordering ${FIRST_ORDER_PREPAY_MIN_QTY}+ gallons)` : '(optional)'}</label>
                   {!form.payment_screenshot ? (
                     <input
                       id="payment_screenshot"

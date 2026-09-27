@@ -82,6 +82,8 @@ assert.equal(firstOrderVerdict({ trusted: false, quantity: MIN - 1, paymentMetho
 assert.equal(firstOrderVerdict({ trusted: false, quantity: MIN, paymentMethod: 'cod', hasScreenshot: false }).ok, false);
 assert.equal(firstOrderVerdict({ trusted: false, quantity: 7, paymentMethod: 'gcash', hasScreenshot: false }).ok, false);
 assert.equal(firstOrderVerdict({ trusted: false, quantity: 7, paymentMethod: 'gcash', hasScreenshot: true }).ok, true);
+// an ordinary household order above the delivery minimum is never gated
+assert.equal(firstOrderVerdict({ trusted: false, quantity: 3, paymentMethod: 'cod', hasScreenshot: false }).ok, true);
 assert.equal(isBulkFirstOrder(false, 7), true);
 assert.equal(isBulkFirstOrder(true, 7), false);
 // opaque: same text as every other rejection
