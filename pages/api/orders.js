@@ -11,13 +11,11 @@ import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleName, isPlausibleAddress,
   strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
-  firstOrderVerdict, isBulkFirstOrder, isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE,
+  isBulkFirstOrder, isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE,
 } from '@/lib/order-guard';
 import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
 
-// Same shape the upload below requires; Zod alone accepts a bare "data:image/x".
-const PAYMENT_PROOF_RE = /^data:image\/\w+;base64,.+/;
 const adminRate = rateLimit({ windowMs: 60_000, max: 30 });
 const orderRate = rateLimit({ windowMs: 60_000, max: 10 });
 
@@ -263,11 +261,6 @@ export default async function handler(req, res) {
       .limit(20);
     // A failed history lookup counts as trusted: fail open, never block on an outage.
     const trusted = !!historyErr || (history || []).some((o) => o.status === 'delivered');
-    // Store pickups send no rider, so there is no trip to waste.
-    const firstOrder = firstOrderVerdict({
-      trusted, quantity: storePickup ? 0 : quantity, paymentMethod: payment_method, hasScreenshot: PAYMENT_PROOF_RE.test(payment_screenshot || ''),
-    });
-    if (!firstOrder.ok) return res.status(403).json({ error: firstOrder.error });
     if (!historyErr && history && history.length > 0) {
       if (!trusted) {
         const since = Date.now() - NEW_PHONE_WINDOW_MS;

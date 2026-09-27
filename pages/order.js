@@ -1,5 +1,5 @@
 import Layout from '@/components/Layout';
-import { FIRST_ORDER_PREPAY_MIN_QTY, MIN_DELIVERY_QTY, DELIVERY_MIN_MESSAGE } from '@/lib/order-guard';
+import { MIN_DELIVERY_QTY, DELIVERY_MIN_MESSAGE } from '@/lib/order-guard';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
@@ -655,12 +655,6 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                 </label>
               ))}
             </div>
-
-            {!storePickup && (
-              <p className="mt-3 text-xs text-clay-muted">
-                New customers ordering {FIRST_ORDER_PREPAY_MIN_QTY} or more gallons: please pay by GCash / Bank Transfer and attach your payment screenshot.
-              </p>
-            )}
 
             {form.payment_method === 'gcash' && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">

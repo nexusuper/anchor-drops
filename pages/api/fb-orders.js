@@ -7,7 +7,7 @@ import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleAddress,
   strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
-  firstOrderVerdict, isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE,
+  isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE,
 } from '@/lib/order-guard';
 import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
@@ -136,11 +136,7 @@ export default async function handler(req, res) {
     .in('phone_normalized', phoneKeys)
     .order('created_at', { ascending: false })
     .limit(20);
-  // Messenger orders are always COD, so a first-time bulk order is refused here
-  // and has to go through the web form, which takes prepayment + a screenshot.
   const trusted = !!historyErr || (history || []).some((o) => o.status === 'delivered');
-  const firstOrder = firstOrderVerdict({ trusted, quantity, paymentMethod: 'cod', hasScreenshot: false });
-  if (!firstOrder.ok) return res.status(403).json({ error: firstOrder.error });
   if (!historyErr && history && history.length > 0 && !trusted) {
     const since = Date.now() - NEW_PHONE_WINDOW_MS;
     const recent = history.filter((o) => new Date(o.created_at).getTime() >= since).length;
