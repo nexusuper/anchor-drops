@@ -10,7 +10,7 @@ import { validateSchedule, manilaToday, manilaNowTime } from '@/lib/scheduling';
 import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleName, isPlausibleAddress,
-  strikeVerdict, phoneVariants, WEB_ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
+  strikeVerdict, phoneVariants, ORDER_REFUSED_MESSAGE, NEW_PHONE_MAX_ORDERS, NEW_PHONE_WINDOW_MS,
   firstOrderVerdict, isBulkFirstOrder, isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE,
 } from '@/lib/order-guard';
 import { loadBlocklistSafe } from '@/lib/blocklist';
@@ -236,7 +236,7 @@ export default async function handler(req, res) {
     // Owner-maintained blocklist (scam / repeat no-show numbers). Same status and
     // message as the strike rejection so a blocked number learns nothing.
     if (isPhoneBlocked(phone, await loadBlocklistSafe(supabase))) {
-      return res.status(403).json({ error: WEB_ORDER_REFUSED_MESSAGE });
+      return res.status(403).json({ error: ORDER_REFUSED_MESSAGE });
     }
 
     const { count: strikes, error: strikeErr } = await supabase
@@ -249,7 +249,7 @@ export default async function handler(req, res) {
       console.error('No-show strike lookup failed:', strikeErr);
     } else {
       const verdict = strikeVerdict(strikes || 0, payment_method);
-      if (!verdict.ok) return res.status(403).json({ error: WEB_ORDER_REFUSED_MESSAGE });
+      if (!verdict.ok) return res.status(403).json({ error: verdict.error });
     }
 
     // Per-phone throttle for numbers that have never completed an order. The
@@ -267,16 +267,16 @@ export default async function handler(req, res) {
     const firstOrder = firstOrderVerdict({
       trusted, quantity: storePickup ? 0 : quantity, paymentMethod: payment_method, hasScreenshot: PAYMENT_PROOF_RE.test(payment_screenshot || ''),
     });
-    if (!firstOrder.ok) return res.status(403).json({ error: WEB_ORDER_REFUSED_MESSAGE });
+    if (!firstOrder.ok) return res.status(403).json({ error: firstOrder.error });
     if (!historyErr && history && history.length > 0) {
       if (!trusted) {
         const since = Date.now() - NEW_PHONE_WINDOW_MS;
         const recent = history.filter((o) => new Date(o.created_at).getTime() >= since).length;
         // Same status and message as the strike rejection above — see
-        // WEB_ORDER_REFUSED_MESSAGE. A distinct response here would disclose that
+        // ORDER_REFUSED_MESSAGE. A distinct response here would disclose that
         // an attacker-supplied number has open undelivered orders.
         if (recent >= NEW_PHONE_MAX_ORDERS) {
-          return res.status(403).json({ error: WEB_ORDER_REFUSED_MESSAGE });
+          return res.status(403).json({ error: ORDER_REFUSED_MESSAGE });
         }
       }
     }
