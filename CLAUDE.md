@@ -97,6 +97,7 @@ Writes go through Postgres RPCs, not raw SQL:
 - `notifications.js` — per-order-status Messenger message templates, shared by manual and automatic notify flows
 - `reorder.js` — pure, isomorphic reorder-cadence logic (needs ≥2 orders with timestamps to compute a customer's due/overdue status)
 - `segments.js` — isomorphic customer segment definitions (new/regular/vip/at-risk/churned) used by both API and UI
+- `maintenance.js` — pure, isomorphic machine-maintenance schedule logic (guide presets, backwash checklist, next-due math in Asia/Manila days). 1:1 mirror of `anchor-drops-system/src/domain/maintenance.ts` — change both. Used by `pages/admin/ops/production/machines.js`, which reads/writes `maintenance_schedules` + `maintenance_logs` through the RLS-scoped browser client (`lib/supabase-browser.js`), not an API route. Test: `node scripts/maintenance.test.mjs`. Reminders are a phone push from the staff app's `notify-maintenance-due` edge function; the website only shows due badges and a banner (no Web Push).
 
 ### Design system
 
