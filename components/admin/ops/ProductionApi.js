@@ -17,6 +17,18 @@ export async function createMachine(supabase, machine) {
   return data;
 }
 
+// "Delete" is a soft delete: status → 'retired'. A hard DELETE is owner-only
+// (machines_del) and is refused by the maintenance_logs / production_logs FKs
+// as soon as the machine has any history. fetchMachines() still returns retired
+// machines so old logs keep their machine name — pages that list or pick
+// machines filter them out; notify-maintenance-due already skips them.
+export async function retireMachine(supabase, id) {
+  // .single(): an update RLS filters out touches zero rows without erroring —
+  // surface that instead of reporting a delete that didn't happen.
+  const { error } = await supabase.from('machines').update({ status: 'retired' }).eq('id', id).select('id').single();
+  if (error) throw error;
+}
+
 // Recurring maintenance schedules (anchor-drops-system migration 0052). Next due
 // is derived, never stored — see lib/maintenance.js.
 export async function fetchMaintenanceSchedules(supabase) {
