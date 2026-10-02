@@ -179,7 +179,7 @@ export default function ProductionPage() {
           <div>
             <label className="text-xs font-semibold text-gray-500">Source</label>
             <div className="flex flex-wrap gap-2 mt-1">
-              {machines.map((m) => (
+              {machines.filter((m) => m.status !== 'retired').map((m) => (
                 <button
                   key={m.id}
                   type="button"

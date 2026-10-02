@@ -14,6 +14,7 @@ import {
   createMaintenanceLog,
   applySchedulePreset,
   updateScheduleInterval,
+  retireMachine,
 } from '@/components/admin/ops/ProductionApi';
 import {
   BACKWASH_GUIDE,
@@ -291,7 +292,9 @@ function SchedulePanel({ machine, tasks, onChanged }) {
 
 export default function MachinesPage() {
   const router = useRouter();
-  const { branchId } = useOpsSession();
+  const { branchId, role } = useOpsSession();
+  // Cosmetic gate against a stray click; RLS (machines_upd) is the real boundary.
+  const canDelete = role === 'owner' || role === 'admin';
   const [machines, setMachines] = useState([]);
   const [allMaintenance, setAllMaintenance] = useState([]);
   const [schedules, setSchedules] = useState([]);
@@ -307,6 +310,7 @@ export default function MachinesPage() {
   const [machineName, setMachineName] = useState('');
   const [machineError, setMachineError] = useState(null);
   const [addingMachine, setAddingMachine] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function reload() {
     setError(null);
@@ -317,7 +321,8 @@ export default function MachinesPage() {
         fetchMaintenanceLogs(supabase),
         fetchMaintenanceSchedules(supabase),
       ]);
-      setMachines(m);
+      // Deleted machines are soft-deleted (status 'retired') — hide them here.
+      setMachines(m.filter((x) => x.status !== 'retired'));
       setAllMaintenance(l);
       setSchedules(s);
     } catch (e) {
@@ -348,11 +353,11 @@ export default function MachinesPage() {
 
   const dueNowCount = useMemo(() => {
     let n = 0;
-    for (const list of tasksByMachine.values()) {
-      n += list.filter((task) => task.due.status === 'overdue' || task.due.status === 'today').length;
+    for (const m of machines) {
+      n += (tasksByMachine.get(m.id) ?? []).filter((task) => task.due.status === 'overdue' || task.due.status === 'today').length;
     }
     return n;
-  }, [tasksByMachine]);
+  }, [machines, tasksByMachine]);
 
   const nextDueByMachine = useMemo(() => {
     const map = new Map();
@@ -393,6 +398,21 @@ export default function MachinesPage() {
     } finally {
       setAddingMachine(false);
       await reload();
+    }
+  }
+
+  async function handleDeleteMachine(machine) {
+    if (!confirm(`Delete ${machine.name}? It disappears from this list and its reminders stop. Its maintenance and production history is kept.`)) return;
+    setFormError(null);
+    setDeleting(true);
+    try {
+      await retireMachine(getSupabaseBrowser(), machine.id);
+      setSelectedId(null);
+      await reload();
+    } catch (e) {
+      setFormError(e.message);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -537,6 +557,16 @@ export default function MachinesPage() {
                     <ClayButton variant="primary" onClick={handleLogMaintenance} loading={saving} disabled={saving} className="w-full">
                       Log maintenance
                     </ClayButton>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMachine(m)}
+                        disabled={deleting}
+                        className="w-full mt-3 rounded-full py-2.5 text-sm font-display font-semibold text-clay-danger ring-1 ring-clay-danger/40 hover:bg-clay-danger-bg disabled:opacity-60"
+                      >
+                        {deleting ? 'Deleting…' : 'Delete machine'}
+                      </button>
+                    )}
                   </ClayCard>
                 )}
               </div>
