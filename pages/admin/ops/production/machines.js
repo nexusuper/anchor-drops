@@ -14,10 +14,12 @@ import {
   createMaintenanceLog,
   applySchedulePreset,
   updateScheduleInterval,
+  setLastServiceDate,
   retireMachine,
 } from '@/components/admin/ops/ProductionApi';
 import {
-  BACKWASH_GUIDE,
+  BACKWASH_GUIDES,
+  BACKWASH_WARNING,
   DUE_STATUS_RANK,
   TIER_LABELS,
   computeTaskDue,
@@ -70,9 +72,9 @@ function fmtDay(date) {
   return fmtDate(`${date}T12:00:00+08:00`);
 }
 
-/** Recurring tasks for one machine: status, mark-done (backdatable), interval editing. */
+/** Recurring tasks for one machine: status, mark-done (backdatable), last-service-date + interval editing. */
 function SchedulePanel({ machine, tasks, onChanged }) {
-  const [active, setActive] = useState(null); // { id, mode: 'done' | 'interval' }
+  const [active, setActive] = useState(null); // { id, mode: 'done' | 'edit' }
   const [date, setDate] = useState('');
   const [cost, setCost] = useState('');
   const [notes, setNotes] = useState('');
@@ -87,7 +89,8 @@ function SchedulePanel({ machine, tasks, onChanged }) {
       return;
     }
     setActive({ id: task.schedule.id, mode });
-    setDate(manilaDateString());
+    // Mark done starts at today; Edit starts at the date currently on record.
+    setDate(mode === 'edit' ? task.due.lastDone ?? '' : manilaDateString());
     setCost('');
     setNotes('');
     setIntervalText(String(task.schedule.interval_days));
@@ -130,14 +133,25 @@ function SchedulePanel({ machine, tasks, onChanged }) {
     );
   }
 
-  function handleSaveInterval(task) {
+  // Save the schedule: its interval and/or the date it was last serviced. The
+  // next due date — and so the reminder — follows from those two.
+  function handleSaveSchedule(task) {
     setFormError(null);
     const days = parseIntervalDays(interval);
     if (days === null) {
       setFormError('Enter a whole number of days (1–3650).');
       return;
     }
-    run((supabase) => updateScheduleInterval(supabase, task.schedule.id, days));
+    const dateChanged = date.trim() !== (task.due.lastDone ?? '');
+    const performedAt = dateChanged ? performedAtFromDate(date) : null;
+    if (dateChanged && !performedAt) {
+      setFormError('Pick the last service date — today or earlier.');
+      return;
+    }
+    run(async (supabase) => {
+      if (days !== task.schedule.interval_days) await updateScheduleInterval(supabase, task.schedule.id, days);
+      if (performedAt) await setLastServiceDate(supabase, task.schedule, task.lastLogId, performedAt);
+    });
   }
 
   function handlePreset(tier) {
@@ -164,6 +178,11 @@ function SchedulePanel({ machine, tasks, onChanged }) {
     );
   }
 
+  // Live preview for the Edit form: what the two fields add up to.
+  const previewAt = date.trim() ? performedAtFromDate(date) : null;
+  const previewDays = parseIntervalDays(interval);
+  const preview = previewAt && previewDays !== null ? computeTaskDue(previewAt, previewDays) : null;
+
   return (
     <div className="space-y-3">
       <h3 className="font-display font-bold text-clay-ink">Maintenance Schedule</h3>
@@ -171,6 +190,7 @@ function SchedulePanel({ machine, tasks, onChanged }) {
         {tasks.map((task) => {
           const { schedule, due } = task;
           const mode = active?.id === schedule.id ? active.mode : null;
+          const guide = BACKWASH_GUIDES[schedule.task_key];
           return (
             <div key={schedule.id} className="py-3 space-y-2">
               <div className="flex items-start gap-3">
@@ -180,7 +200,7 @@ function SchedulePanel({ machine, tasks, onChanged }) {
                     Every {schedule.interval_days} day{schedule.interval_days === 1 ? '' : 's'}
                     {due.lastDone
                       ? ` · last ${fmtDay(due.lastDone)} · next ${fmtDay(due.nextDue)}`
-                      : ' · log when it was last done'}
+                      : ' · set when it was last done'}
                   </p>
                 </div>
                 <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_CLASS[due.status]}`}>
@@ -191,20 +211,20 @@ function SchedulePanel({ machine, tasks, onChanged }) {
                 <ClayButton variant="primary" size="sm" onClick={() => open(task, 'done')} className="flex-1">
                   Mark done
                 </ClayButton>
-                <ClayButton variant="outline" size="sm" onClick={() => open(task, 'interval')} className="flex-1">
-                  Edit interval
+                <ClayButton variant="outline" size="sm" onClick={() => open(task, 'edit')} className="flex-1">
+                  Edit schedule
                 </ClayButton>
               </div>
 
               {mode === 'done' && (
                 <div className="rounded-2xl bg-clay-bg p-4 space-y-3">
-                  {schedule.task_key === 'backwash' && (
+                  {guide && (
                     <div className="space-y-2">
                       <p role="alert" className="flex items-start gap-2 rounded-xl bg-clay-danger-bg p-3 text-sm font-bold text-clay-danger">
                         <ClayIcon name="alert" className="w-4 h-4 mt-0.5 shrink-0" />
-                        {BACKWASH_GUIDE.warning}
+                        {BACKWASH_WARNING}
                       </p>
-                      {BACKWASH_GUIDE.sections.map((section) => (
+                      {guide.map((section) => (
                         <div key={section.title}>
                           <p className="text-sm font-semibold text-clay-ink">{section.title}</p>
                           <ol className="list-decimal pl-5 text-xs text-clay-ink2 space-y-0.5">
@@ -252,8 +272,18 @@ function SchedulePanel({ machine, tasks, onChanged }) {
                 </div>
               )}
 
-              {mode === 'interval' && (
+              {mode === 'edit' && (
                 <div className="rounded-2xl bg-clay-bg p-4 space-y-3">
+                  <label className="block text-xs font-semibold text-clay-muted">
+                    Last service date
+                    <input
+                      type="date"
+                      max={manilaDateString()}
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className={`${INPUT} mt-1 bg-white`}
+                    />
+                  </label>
                   <label className="block text-xs font-semibold text-clay-muted">
                     Repeat every (days)
                     <input
@@ -266,9 +296,15 @@ function SchedulePanel({ machine, tasks, onChanged }) {
                       className={`${INPUT} mt-1 bg-white`}
                     />
                   </label>
+                  {preview && (
+                    <p className="text-xs font-medium text-clay-ink2">
+                      Next due {fmtDay(preview.nextDue)}. You get a phone reminder at 7:00 AM the day before, on the day,
+                      and every day it stays overdue.
+                    </p>
+                  )}
                   {formError && <p className="text-sm text-clay-danger">{formError}</p>}
-                  <ClayButton variant="primary" onClick={() => handleSaveInterval(task)} loading={saving} disabled={saving} className="w-full">
-                    Save interval
+                  <ClayButton variant="primary" onClick={() => handleSaveSchedule(task)} loading={saving} disabled={saving} className="w-full">
+                    Save schedule
                   </ClayButton>
                 </div>
               )}
@@ -340,9 +376,11 @@ export default function MachinesPage() {
     const latest = latestBySchedule(allMaintenance);
     const map = new Map();
     for (const schedule of schedules) {
-      const due = computeTaskDue(latest.get(schedule.id) ?? null, schedule.interval_days);
+      const lastLog = latest.get(schedule.id);
+      const due = computeTaskDue(lastLog?.performed_at ?? null, schedule.interval_days);
       const list = map.get(schedule.machine_id) ?? [];
-      list.push({ schedule, due });
+      // lastLogId: the log a "last service date" edit moves.
+      list.push({ schedule, due, lastLogId: lastLog?.id ?? null });
       map.set(schedule.machine_id, list);
     }
     for (const list of map.values()) {
