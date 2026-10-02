@@ -63,6 +63,29 @@ export async function updateScheduleInterval(supabase, id, intervalDays) {
   if (error) throw error;
 }
 
+// Correct when a task was last serviced: move its latest linked log to the
+// given date, or — if it was never logged — create the first one.
+// ponytail: only the latest log moves. If an older log is newer than the date
+// chosen, that older log becomes "last done" instead. Fixing that needs a
+// delete, which is owner-only (maint_del) — add an owner path if it bites.
+export async function setLastServiceDate(supabase, schedule, lastLogId, performedAt) {
+  // .single(): an update RLS filters out touches zero rows without erroring.
+  const { error } = lastLogId
+    ? await supabase.from('maintenance_logs').update({ performed_at: performedAt }).eq('id', lastLogId).select('id').single()
+    : await supabase
+        .from('maintenance_logs')
+        .insert({
+          branch_id: schedule.branch_id,
+          machine_id: schedule.machine_id,
+          schedule_id: schedule.id,
+          description: schedule.name,
+          performed_at: performedAt,
+        })
+        .select('id')
+        .single();
+  if (error) throw error;
+}
+
 export async function fetchProductionLogs(supabase, { machineId } = {}) {
   let query = supabase.from('production_logs').select('*').order('produced_at', { ascending: false });
   if (machineId) query = query.eq('machine_id', machineId);

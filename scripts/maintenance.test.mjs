@@ -1,8 +1,8 @@
 // Same cases as anchor-drops-system/src/domain/__tests__/maintenance.test.ts.
 import assert from 'node:assert/strict';
 import {
-  MAINTENANCE_TASKS, computeTaskDue, dueLabel, latestBySchedule,
-  manilaDateString, parseIntervalDays, performedAtFromDate,
+  BACKWASH_GUIDES, MAINTENANCE_TASKS, computeTaskDue, dueLabel, latestBySchedule,
+  manilaDateString, parseIntervalDays, performedAtFromDate, shiftDate,
 } from '../lib/maintenance.js';
 
 // Fixed "now": 2026-10-01 09:00 PHT (01:00 UTC).
@@ -12,12 +12,22 @@ const iso = (ms) => new Date(ms).toISOString();
 
 // guide defaults for both production tiers
 assert.deepEqual(MAINTENANCE_TASKS.map((t) => [t.key, t.days.standard, t.days.high]), [
-  ['backwash', 7, 3],
+  ['backwash_multimedia', 7, 3],
+  ['backwash_carbon', 7, 3],
+  ['backwash_softener', 7, 3],
   ['post_filter', 30, 15],
   ['product_filter', 150, 90],
   ['raw_tank', 180, 180],
   ['product_tank', 365, 365],
 ]);
+
+// a checklist for each backwash task and no other; only the softener uses salt / brine
+assert.deepEqual(
+  Object.keys(BACKWASH_GUIDES),
+  MAINTENANCE_TASKS.filter((t) => t.key.startsWith('backwash')).map((t) => t.key),
+);
+assert.ok(JSON.stringify(BACKWASH_GUIDES.backwash_softener).includes('6 kilos'));
+assert.ok(!JSON.stringify(BACKWASH_GUIDES.backwash_carbon).includes('BRINE'));
 
 // Manila calendar day, not UTC: 2026-09-30 16:30 UTC is already Oct 1 in Manila
 assert.equal(manilaDateString(Date.UTC(2026, 8, 30, 16, 30)), '2026-10-01');
@@ -69,8 +79,8 @@ const map = latestBySchedule([
   { schedule_id: null, performed_at: '2026-09-30T00:00:00Z' },
   { schedule_id: 'b', performed_at: '2026-08-01T00:00:00Z' },
 ]);
-assert.equal(map.get('a'), '2026-09-20T00:00:00Z');
-assert.equal(map.get('b'), '2026-08-01T00:00:00Z');
+assert.equal(map.get('a').performed_at, '2026-09-20T00:00:00Z');
+assert.equal(map.get('b').performed_at, '2026-08-01T00:00:00Z');
 assert.equal(map.size, 2);
 
 // performedAtFromDate: today → now; rejects future / malformed / impossible dates
@@ -79,6 +89,13 @@ assert.equal(performedAtFromDate('2026-10-02', NOW), null);
 assert.equal(performedAtFromDate('2026-02-31', NOW), null);
 assert.equal(performedAtFromDate('10/01/2026', NOW), null);
 assert.equal(performedAtFromDate('', NOW), null);
+
+// shiftDate moves by whole days, never past today
+assert.equal(shiftDate('2026-09-29', -1, NOW), '2026-09-28');
+assert.equal(shiftDate('2026-09-29', 1, NOW), '2026-09-30');
+assert.equal(shiftDate('2026-10-01', 1, NOW), '2026-10-01');
+assert.equal(shiftDate('2026-03-01', -1, NOW), '2026-02-28');
+assert.equal(shiftDate('garbage', -1, NOW), '2026-10-01');
 
 // parseIntervalDays: whole days in 1..3650 only
 assert.equal(parseIntervalDays('7'), 7);
