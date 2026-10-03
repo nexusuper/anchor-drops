@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  classifyPickupTime, addDays, computeAllowedDeliveryWindow, validateSchedule, closingTime,
+  classifyPickupTime, addDays, computeAllowedDeliveryWindow, validateSchedule,
   manilaNowTime, STORE_TIME_SLOTS, timeSlots,
 } from '../lib/scheduling.js';
 
@@ -31,15 +31,8 @@ assert.equal(classifyPickupTime('17:01'), null);
 assert.equal(classifyPickupTime('07:59'), null);
 assert.equal(classifyPickupTime('not-a-time'), null);
 
-// closingTime — 2026-07-05 is a Sunday: half day, closes 12:00 unless overridden
-assert.equal(closingTime('2026-07-04'), '17:00'); // Saturday
-assert.equal(closingTime('2026-07-05'), '12:00'); // Sunday
-assert.equal(closingTime('2026-07-05', ['2026-07-05']), '17:00'); // Sunday flagged full hours
-assert.equal(closingTime('2026-07-06'), '17:00'); // Monday
-// timeSlots on a Sunday stop at noon; override restores the afternoon
-assert.equal(timeSlots({ date: '2026-07-05' }).at(-1), '12:00');
-assert.deepEqual(timeSlots({ date: '2026-07-05', minTime: '13:00' }), []);
-assert.equal(timeSlots({ date: '2026-07-05', openOverrides: ['2026-07-05'] }).at(-1), '17:00');
+// Open every day — 2026-07-05 is a Sunday, full hours like any other day
+assert.equal(timeSlots({ date: '2026-07-05' }).at(-1), '17:00');
 
 // addDays
 assert.equal(addDays('2026-07-03', 1), '2026-07-04');
@@ -55,19 +48,14 @@ assert.deepEqual(
   computeAllowedDeliveryWindow({ pickupDate: '2026-07-03', pickupTime: '14:30' }),
   { minDate: '2026-07-04', maxDate: null, minTime: '08:00', maxTime: '17:00' }
 );
-// afternoon pickup on Saturday -> Sunday (half day) is the next day
+// afternoon pickup on Saturday -> Sunday is the next day
 assert.deepEqual(
   computeAllowedDeliveryWindow({ pickupDate: '2026-07-04', pickupTime: '14:30' }),
   { minDate: '2026-07-05', maxDate: null, minTime: '08:00', maxTime: '17:00' }
 );
-// morning pickup on Sunday -> no afternoon to deliver in, next day or later
+// morning pickup on Sunday -> same-day afternoon delivery, like any day
 assert.deepEqual(
   computeAllowedDeliveryWindow({ pickupDate: '2026-07-05', pickupTime: '09:00' }),
-  { minDate: '2026-07-06', maxDate: null, minTime: '08:00', maxTime: '17:00' }
-);
-// ...unless that Sunday is flagged full hours
-assert.deepEqual(
-  computeAllowedDeliveryWindow({ pickupDate: '2026-07-05', pickupTime: '09:00', openOverrides: ['2026-07-05'] }),
   { minDate: '2026-07-05', maxDate: '2026-07-05', minTime: '13:00', maxTime: '17:00' }
 );
 assert.equal(computeAllowedDeliveryWindow({ pickupDate: '2026-07-03', pickupTime: '12:30' }), null);
@@ -104,7 +92,7 @@ assert.equal(
   }).ok,
   false
 );
-// delivery-only: Sunday morning accepted, Sunday afternoon rejected
+// delivery-only: Sunday morning and afternoon both accepted
 assert.deepEqual(
   validateSchedule({
     hasEmptyContainers: false, pickupDate: null, pickupTime: null,
@@ -112,18 +100,10 @@ assert.deepEqual(
   }),
   { ok: true }
 );
-assert.equal(
-  validateSchedule({
-    hasEmptyContainers: false, pickupDate: null, pickupTime: null,
-    deliveryDate: '2026-07-05', deliveryTime: '14:00', today: '2026-07-03',
-  }).ok,
-  false
-);
-// delivery-only: Sunday afternoon accepted when that Sunday is flagged full hours
 assert.deepEqual(
   validateSchedule({
     hasEmptyContainers: false, pickupDate: null, pickupTime: null,
-    deliveryDate: '2026-07-05', deliveryTime: '14:00', today: '2026-07-03', openOverrides: ['2026-07-05'],
+    deliveryDate: '2026-07-05', deliveryTime: '14:00', today: '2026-07-03',
   }),
   { ok: true }
 );
@@ -168,13 +148,13 @@ assert.deepEqual(
   }),
   { ok: true }
 );
-// refill, afternoon pickup on Saturday, Sunday afternoon delivery rejected
-assert.equal(
+// refill, afternoon pickup on Saturday, Sunday afternoon delivery
+assert.deepEqual(
   validateSchedule({
     hasEmptyContainers: true, pickupDate: '2026-07-04', pickupTime: '14:00',
     deliveryDate: '2026-07-05', deliveryTime: '14:00', today: '2026-07-03',
-  }).ok,
-  false
+  }),
+  { ok: true }
 );
 // refill, afternoon pickup on Saturday, Monday delivery also fine
 assert.deepEqual(
@@ -191,14 +171,6 @@ assert.deepEqual(
     deliveryDate: '2026-07-08', deliveryTime: '10:00', today: '2026-07-03',
   }),
   { ok: true }
-);
-// refill, afternoon pickup, Sunday afternoon delivery rejected even though it's after minDate
-assert.equal(
-  validateSchedule({
-    hasEmptyContainers: true, pickupDate: '2026-07-03', pickupTime: '14:00',
-    deliveryDate: '2026-07-05', deliveryTime: '14:00', today: '2026-07-03',
-  }).ok,
-  false
 );
 // refill, afternoon pickup, same-day delivery attempted (violates invariant + window)
 assert.equal(
@@ -224,29 +196,22 @@ assert.equal(
   }).ok,
   false
 );
-// refill: Sunday morning pickup can't deliver same afternoon (half day)...
-assert.equal(
-  validateSchedule({
-    hasEmptyContainers: true, pickupDate: '2026-07-05', pickupTime: '09:00',
-    deliveryDate: '2026-07-05', deliveryTime: '14:00', today: '2026-07-03',
-  }).ok,
-  false
-);
-// ...but Monday onward is fine
+// refill: Sunday morning pickup, same-afternoon delivery
 assert.deepEqual(
   validateSchedule({
     hasEmptyContainers: true, pickupDate: '2026-07-05', pickupTime: '09:00',
+    deliveryDate: '2026-07-05', deliveryTime: '14:00', today: '2026-07-03',
+  }),
+  { ok: true }
+);
+// refill: Sunday afternoon pickup, Monday delivery
+assert.deepEqual(
+  validateSchedule({
+    hasEmptyContainers: true, pickupDate: '2026-07-05', pickupTime: '14:00',
     deliveryDate: '2026-07-06', deliveryTime: '09:00', today: '2026-07-03',
   }),
   { ok: true }
 );
-// refill: Sunday afternoon pickup rejected
-const sundayPm = validateSchedule({
-  hasEmptyContainers: true, pickupDate: '2026-07-05', pickupTime: '14:00',
-  deliveryDate: '2026-07-06', deliveryTime: '09:00', today: '2026-07-03',
-});
-assert.equal(sundayPm.ok, false);
-assert.match(sundayPm.error, /Sundays/);
 // invariant: delivery must be strictly after pickup even if someone forges a same-window-looking pair across dates
 assert.equal(
   validateSchedule({
