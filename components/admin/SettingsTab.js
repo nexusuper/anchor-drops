@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
-// Store is normally closed Sunday (lib/scheduling.js). Dates listed here let
-// online ordering treat that specific day as open, e.g. a one-off Sunday sale.
+// Sunday is normally a half day, 8:00-12:00 (lib/scheduling.js). Dates listed
+// here let online ordering use full hours that day, e.g. a one-off Sunday sale.
 export default function SettingsTab({ savedPassword }) {
   const [dates, setDates] = useState(null);
   const [newDate, setNewDate] = useState('');
@@ -84,7 +84,7 @@ export default function SettingsTab({ savedPassword }) {
       <div className="clay-raised rounded-2xl p-4 space-y-3">
         <div className="font-display font-bold text-clay-ink">Business Hours</div>
         <p className="text-xs text-clay-ink/60">
-          Store is closed Sundays by default. Add a date below to open online ordering for that Sunday specifically.
+          Sundays are a half day (8:00 AM–12:00 PM) by default. Add a date below to open online ordering for full hours that Sunday.
         </p>
         {dates === null && <p className="text-clay-ink/60 text-sm">Loading…</p>}
         {dates && dates.length > 0 && (

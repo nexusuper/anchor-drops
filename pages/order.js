@@ -9,7 +9,7 @@ import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { PRODUCTS, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY, STORE_ADDRESS_DISPLAY } from '@/lib/products';
 import {
   classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday, manilaNowTime,
-  timeSlots, STORE_HOURS_LABEL,
+  timeSlots, STORE_HOURS_LABEL, SUNDAY_HOURS_LABEL,
 } from '@/lib/scheduling';
 
 // '13:30' -> '1:30 PM'
@@ -20,8 +20,8 @@ function formatSlot(t) {
 
 // Dropdown of bookable slots only — native time pickers on mobile ignore min/max,
 // which let customers pick lunch-break or after-hours times.
-function TimeSelect({ id, value, onChange, date, today, nowTime, minTime, maxTime }) {
-  const slots = timeSlots({ minTime, maxTime, date, today, nowTime });
+function TimeSelect({ id, value, onChange, date, today, nowTime, minTime, maxTime, openOverrides }) {
+  const slots = timeSlots({ minTime, maxTime, date, today, nowTime, openOverrides });
   return (
     <>
       <select id={id} required value={value} onChange={(e) => onChange(e.target.value)} className="clay-input">
@@ -264,11 +264,14 @@ function OrderForm({ activeSkus, openOverrideDates }) {
   const today = manilaToday();
   const nowTime = manilaNowTime();
   const pickupSlot = classifyPickupTime(form.pickup_time);
-  const showAfternoonNotice = !storePickup && form.has_empty_containers && pickupSlot === 'afternoon';
   const openOverrides = openOverrideDates;
   const allowedDelivery = !storePickup && form.has_empty_containers
     ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time, openOverrides })
     : null;
+  // Same-day delivery locks the date; otherwise (afternoon pickup, or morning
+  // pickup on a Sunday half day) the customer picks next day or later.
+  const sameDayDelivery = allowedDelivery && allowedDelivery.maxDate !== null;
+  const laterDelivery = allowedDelivery && allowedDelivery.maxDate === null;
   const scheduleCheck = validateSchedule({
     hasEmptyContainers: !storePickup && form.has_empty_containers,
     pickupDate: form.pickup_date || null,
@@ -723,11 +726,11 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                   <div>
                     <label htmlFor="store_pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup date *</label>
                     <input id="store_pickup_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
+                    <p className="text-xs text-clay-muted mt-1">{SUNDAY_HOURS_LABEL}.</p>
                   </div>
                   <div>
                     <label htmlFor="store_pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup time *</label>
-                    <TimeSelect id="store_pickup_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} />
+                    <TimeSelect id="store_pickup_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} openOverrides={openOverrides} />
                     <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
                   </div>
                 </>
@@ -759,23 +762,26 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                   <div>
                     <label htmlFor="pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
                     <input id="pickup_date" required type="date" min={today} value={form.pickup_date} onChange={(e) => set('pickup_date', e.target.value)} className="clay-input" />
-                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
+                    <p className="text-xs text-clay-muted mt-1">{SUNDAY_HOURS_LABEL}.</p>
                   </div>
                   <div>
                     <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
-                    <TimeSelect id="pickup_time" value={form.pickup_time} onChange={(v) => setForm((f) => ({ ...f, pickup_time: v, delivery_time: '' }))} date={form.pickup_date} today={today} nowTime={nowTime} />
+                    <TimeSelect id="pickup_time" value={form.pickup_time} onChange={(v) => setForm((f) => ({ ...f, pickup_time: v, delivery_time: '' }))} date={form.pickup_date} today={today} nowTime={nowTime} openOverrides={openOverrides} />
                     <p className="text-xs text-clay-muted mt-1">
-                      Store hours: {STORE_HOURS_LABEL}. Morning pickup = delivery same afternoon; afternoon pickup = delivery next day or later, your choice.
+                      Store hours: {STORE_HOURS_LABEL}. Morning pickup = delivery same afternoon (Mon–Sat); afternoon or Sunday pickup = delivery next day or later, your choice.
                     </p>
                   </div>
 
-                  {showAfternoonNotice && (
+                  {laterDelivery && (
                     <div className="clay-inset rounded-xl p-3 text-sm text-clay-ink2" role="status">
-                      We will try to pick up in the afternoon. Delivery will be tomorrow or later — pick a date below.
+                      {pickupSlot === 'afternoon'
+                        ? 'We will try to pick up in the afternoon.'
+                        : 'Sunday is a half day, so there is no same-day delivery.'}{' '}
+                      Delivery will be tomorrow or later — pick a date below.
                     </div>
                   )}
 
-                  {allowedDelivery && pickupSlot === 'morning' && (
+                  {sameDayDelivery && (
                     <>
                       <div>
                         <label htmlFor="delivery_date_locked" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
@@ -783,22 +789,22 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                       </div>
                       <div>
                         <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={allowedDelivery.minDate} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
+                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={allowedDelivery.minDate} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} openOverrides={openOverrides} />
                         <p className="text-xs text-clay-muted mt-1">Same-day delivery: 1:00–5:00 PM.</p>
                       </div>
                     </>
                   )}
 
-                  {allowedDelivery && pickupSlot === 'afternoon' && (
+                  {laterDelivery && (
                     <>
                       <div>
                         <label htmlFor="delivery_date_choice" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
                         <input id="delivery_date_choice" required type="date" min={allowedDelivery.minDate} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                        <p className="text-xs text-clay-muted mt-1">Next day onward, your choice. Closed Sundays.</p>
+                        <p className="text-xs text-clay-muted mt-1">Next day onward, your choice. {SUNDAY_HOURS_LABEL}.</p>
                       </div>
                       <div>
                         <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
+                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} openOverrides={openOverrides} />
                         <p className="text-xs text-clay-muted mt-1">{STORE_HOURS_LABEL}.</p>
                       </div>
                     </>
@@ -809,11 +815,11 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                   <div>
                     <label htmlFor="delivery_date" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
                     <input id="delivery_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
+                    <p className="text-xs text-clay-muted mt-1">{SUNDAY_HOURS_LABEL}.</p>
                   </div>
                   <div>
                     <label htmlFor="delivery_time_only" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                    <TimeSelect id="delivery_time_only" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} />
+                    <TimeSelect id="delivery_time_only" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} openOverrides={openOverrides} />
                     <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
                   </div>
                 </>
