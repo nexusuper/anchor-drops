@@ -25,6 +25,7 @@ No test framework is configured. `scripts/` has a couple of plain-Node assertion
 node scripts/loyalty.test.mjs
 node scripts/reward-codes.test.mjs   # requires REWARD_CODE_SECRET in env
 node scripts/messenger-welcome-cap.test.mjs
+node scripts/messenger-rewards-helper.test.mjs
 ```
 
 ## Architecture
@@ -96,6 +97,7 @@ Writes go through Postgres RPCs, not raw SQL:
 - `rate-limit.js` — in-memory per-IP rate limiter
 - `notifications.js` — per-order-status Messenger message templates, shared by manual and automatic notify flows
 - `reorder.js` — pure, isomorphic reorder-cadence logic (needs ≥2 orders with timestamps to compute a customer's due/overdue status)
+- `rewards-helper.js` — server-only Messenger AI helper (Claude via `@anthropic-ai/sdk`) that walks customers through voucher redemption. `messenger-webhook.js` routes voucher-topic free text to it; system prompt is built from the live loyalty/code constants. No tools, no DB access; 6+-digit numbers (reward codes, phones) are redacted before the API call. Falls back to a static how-to reply on any failure or missing `ANTHROPIC_API_KEY`.
 - `segments.js` — isomorphic customer segment definitions (new/regular/vip/at-risk/churned) used by both API and UI
 - `maintenance.js` — pure, isomorphic machine-maintenance schedule logic (guide presets, per-filter backwash checklists, next-due math in Asia/Manila days). 1:1 mirror of `anchor-drops-system/src/domain/maintenance.ts` — change both. Used by `pages/admin/ops/production/machines.js`, which reads/writes `maintenance_schedules` + `maintenance_logs` through the RLS-scoped browser client (`lib/supabase-browser.js`), not an API route. Test: `node scripts/maintenance.test.mjs`. Reminders are a phone push from the staff app's `notify-maintenance-due` edge function; the website only shows due badges and a banner (no Web Push).
 
@@ -130,6 +132,7 @@ See `.env.example` for all required vars. Key ones:
 - `ADMIN_PASSWORD` — legacy single admin panel password; used only when `ADMIN_USERS` is unset
 - `FB_PAGE_ACCESS_TOKEN` / `FB_VERIFY_TOKEN` / `FB_APP_SECRET` — Messenger integration
 - `FB_WEBHOOK_SECRET` — ManyChat order intake webhook secret
+- `ANTHROPIC_API_KEY` — Messenger voucher helper (optional; static fallback without it)
 - `NEXT_PUBLIC_FB_PIXEL_ID` / `NEXT_PUBLIC_FB_PAGE_ID` — client-side Facebook integration
 
 ### Remotion video assets
