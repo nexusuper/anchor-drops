@@ -121,10 +121,10 @@ export default function Order() {
     );
   }
 
-  return <OrderForm activeSkus={siteStatus?.activeSkus ?? null} openOverrideDates={siteStatus?.openOverrideDates || []} />;
+  return <OrderForm activeSkus={siteStatus?.activeSkus ?? null} />;
 }
 
-function OrderForm({ activeSkus, openOverrideDates }) {
+function OrderForm({ activeSkus }) {
   const router = useRouter();
   const { product: queryProduct } = router.query;
   // null activeSkus = status check hasn't landed yet (or failed) — show everything.
@@ -265,9 +265,8 @@ function OrderForm({ activeSkus, openOverrideDates }) {
   const nowTime = manilaNowTime();
   const pickupSlot = classifyPickupTime(form.pickup_time);
   const showAfternoonNotice = !storePickup && form.has_empty_containers && pickupSlot === 'afternoon';
-  const openOverrides = openOverrideDates;
   const allowedDelivery = !storePickup && form.has_empty_containers
-    ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time, openOverrides })
+    ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time })
     : null;
   const scheduleCheck = validateSchedule({
     hasEmptyContainers: !storePickup && form.has_empty_containers,
@@ -277,7 +276,6 @@ function OrderForm({ activeSkus, openOverrideDates }) {
     deliveryTime: form.delivery_time,
     today,
     nowTime,
-    openOverrides,
   });
 
   // Switching between a store-pickup and a delivery product invalidates the
@@ -723,7 +721,6 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                   <div>
                     <label htmlFor="store_pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup date *</label>
                     <input id="store_pickup_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
                   </div>
                   <div>
                     <label htmlFor="store_pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup time *</label>
@@ -759,7 +756,6 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                   <div>
                     <label htmlFor="pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
                     <input id="pickup_date" required type="date" min={today} value={form.pickup_date} onChange={(e) => set('pickup_date', e.target.value)} className="clay-input" />
-                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
                   </div>
                   <div>
                     <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
@@ -794,7 +790,7 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                       <div>
                         <label htmlFor="delivery_date_choice" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
                         <input id="delivery_date_choice" required type="date" min={allowedDelivery.minDate} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                        <p className="text-xs text-clay-muted mt-1">Next day onward, your choice. Closed Sundays.</p>
+                        <p className="text-xs text-clay-muted mt-1">Next day onward, your choice. Open every day.</p>
                       </div>
                       <div>
                         <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
@@ -809,7 +805,6 @@ function OrderForm({ activeSkus, openOverrideDates }) {
                   <div>
                     <label htmlFor="delivery_date" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
                     <input id="delivery_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                    <p className="text-xs text-clay-muted mt-1">Closed Sundays.</p>
                   </div>
                   <div>
                     <label htmlFor="delivery_time_only" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
