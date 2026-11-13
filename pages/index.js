@@ -5,9 +5,8 @@ import WaterBackground from '@/components/water/WaterBackground';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
-import { useEffect, useState } from 'react';
 import { FB_PAGE_ID } from '@/pages/_app';
-import { PRODUCTS } from '@/lib/products';
+import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
 
 const features = [
   {
@@ -23,7 +22,7 @@ const features = [
   {
     icon: 'filter',
     title: 'Free Refill After 10 Orders',
-    desc: 'Every order earns loyalty rewards. Rack up free gallons automatically just by ordering the way you already do.',
+    desc: 'Gallon refill orders earn rewards automatically.',
   },
 ];
 
@@ -39,15 +38,7 @@ function Jug() {
 }
 
 export default function Home() {
-  // null = status check hasn't landed yet — show everything rather than flash-hide.
-  const [activeSkus, setActiveSkus] = useState(null);
-  useEffect(() => {
-    fetch('/api/ordering-status')
-      .then((r) => r.json())
-      .then((d) => setActiveSkus(d.activeSkus ?? null))
-      .catch(() => {});
-  }, []);
-  const visibleProducts = activeSkus ? PRODUCTS.filter((p) => activeSkus.includes(p.id)) : PRODUCTS;
+  const catalog = useStorefrontCatalog();
 
   return (
     <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded" background={<WaterBackground />}>
@@ -135,17 +126,22 @@ export default function Home() {
             Affordable, premium water.
           </h2>
         </div>
+        {!catalog?.products && <p role="status">{catalog ? 'Current prices are temporarily unavailable.' : 'Loading current prices…'}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto gap-6 mb-8">
-          {visibleProducts.map((p, i) => (
+          {catalog?.products?.map((p, i) => (
             <ClayCard key={p.id} className={`p-7 text-center reveal reveal-d${i}`}>
-              <span className="inline-block text-xs font-extrabold text-white rounded-full px-3 py-1 mb-4 clay-btn-primary">
+              {p.tag && <span className="inline-block text-xs font-extrabold text-white rounded-full px-3 py-1 mb-4 clay-btn-primary">
                 {p.tag}
-              </span>
-              <Jug />
+              </span>}
+              {p.kind !== 'bottle' && <Jug />}
               <h3 className="font-editorial text-lg font-bold text-clay-ink mt-3 mb-1">{p.name}</h3>
               <p className="font-editorial text-3xl font-bold text-clay-skydeep mb-1">₱{p.refill}</p>
-              <p className="text-xs font-bold text-clay-muted mb-5">refill only · container + refill ₱{p.refill + p.container}</p>
-              <ClayButton href={`/order?product=${p.id}`} className="w-full">ORDER WATER</ClayButton>
+              <p className="text-xs font-bold text-clay-muted mb-5">
+                {p.kind === 'refill' && p.container > 0
+                  ? `refill only · new round container + first fill ₱${Number((p.refill + p.container).toFixed(2))}`
+                  : p.kind === 'info' ? p.description : `per ${productUnit(p)}`}
+              </p>
+              {p.kind !== 'info' && <ClayButton href={`/order?product=${encodeURIComponent(p.id)}`} className="w-full">ORDER WATER</ClayButton>}
             </ClayCard>
           ))}
         </div>
@@ -162,13 +158,13 @@ export default function Home() {
             Water on your schedule, not the other way around.
           </h2>
           <p className="text-clay-muted font-semibold text-base max-w-md">
-            No account, no hassle. Order, check its status anytime, and earn a free refill voucher every time.
+            Order without an account and check its status anytime.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <ClayButton href="/order" size="lg">ORDER WATER</ClayButton>
             <ClayButton href="/track" variant="outline" size="lg">TRACK ORDER</ClayButton>
           </div>
-          <p className="text-sm font-bold text-clay-skydeep">💧 Free refill after 10 refills — every order counts.</p>
+          <p className="text-sm font-bold text-clay-skydeep">💧 Free refill after 10 gallon refills.</p>
         </div>
       </section>
 

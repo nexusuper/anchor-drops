@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
+// Store is normally closed Sunday (lib/scheduling.js). Dates listed here let
+// online ordering treat that specific day as open, e.g. a one-off Sunday sale.
 export default function SettingsTab({ savedPassword }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [blocked, setBlocked] = useState(null);
   const [newPhone, setNewPhone] = useState('');
   const [newReason, setNewReason] = useState('');
+  const [bands, setBands] = useState(null);
 
   const fetchBlocked = useCallback(async () => {
     try {
@@ -41,8 +44,59 @@ export default function SettingsTab({ savedPassword }) {
     }
   }
 
+  const fetchDates = useCallback(async () => {
+    try {
+      const data = await apiFetch('/api/settings', { password: savedPassword });
+      setBands(data?.bottle_delivery_bands || []);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [savedPassword]);
+
+  useEffect(() => { queueMicrotask(() => fetchDates()); }, [fetchDates]);
+
+  async function saveBands(event) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      await apiFetch('/api/settings', {
+        method: 'PATCH', password: savedPassword,
+        body: { bottle_delivery_bands: bands.map(({ max_km, fee }) => ({ max_km: Number(max_km), fee: Number(fee) })) },
+      });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-4 max-w-xl">
+      {bands && (
+        <form onSubmit={saveBands} className="clay-raised rounded-2xl p-4 space-y-3">
+          <h3 className="font-display font-bold text-clay-ink">Bottled-water delivery rates</h3>
+          <p className="text-xs text-clay-ink/70">Bugo is free. Enter maximum distances in ascending order for the rest of Cagayan de Oro.</p>
+          {bands.map((band, index) => (
+            <div key={index} className="flex gap-2 items-end">
+              {[['max_km', 'Up to (km)'], ['fee', 'Fee (₱)']].map(([key, label]) => (
+                <label key={key} className="min-w-0 flex-1 text-xs">
+                  {label}
+                  <input required type="number" min={key === 'fee' ? '0' : '0.01'} step="0.01"
+                    className="clay-input w-full" value={band[key]}
+                    onChange={(e) => setBands(bands.map((row, i) => i === index ? { ...row, [key]: e.target.value } : row))}
+                  />
+                </label>
+              ))}
+              <button type="button" className="clay-btn-white rounded-lg p-2 text-xs" onClick={() => setBands(bands.filter((_, i) => i !== index))}>Remove</button>
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <button type="button" className="clay-btn-white rounded-lg p-2 text-sm" disabled={bands.length >= 30} onClick={() => setBands([...bands, { max_km: '', fee: '' }])}>Add rate</button>
+            <button type="submit" className="clay-btn-primary rounded-lg p-2 text-sm" disabled={saving}>Save rates</button>
+          </div>
+        </form>
+      )}
       <div className="clay-raised rounded-2xl p-4 space-y-3">
         <div className="font-display font-bold text-clay-ink">Blocked Numbers</div>
         <p className="text-xs text-clay-ink/60">
@@ -87,7 +141,6 @@ export default function SettingsTab({ savedPassword }) {
             </button>
           </div>
         )}
-        {error && <p className="text-sm text-clay-danger">{error}</p>}
       </div>
     </div>
   );

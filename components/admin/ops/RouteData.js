@@ -140,11 +140,12 @@ export async function fetchStaffRoute(supabase) {
     .from('orders')
     .select('*')
     .is('archived_at', null)
+    .or('fulfillment.is.null,fulfillment.eq.delivery')
     .in('status', ON_ROUTE_STATUSES)
     .or(`delivery_date.eq.${today},delivery_date.is.null`)
     .order('delivery_time', { ascending: true, nullsFirst: true });
   if (error) throw error;
-  return groupByBarangay(data ?? []);
+  return groupByBarangay((data ?? []).filter((order) => !order.address?.startsWith('Store pickup')));
 }
 
 export function groupByBarangay(orders) {

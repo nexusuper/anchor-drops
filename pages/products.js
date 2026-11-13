@@ -3,8 +3,7 @@ import PurifyProcess from '@/components/PurifyProcess';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
-import { useEffect, useState } from 'react';
-import { PRODUCTS } from '@/lib/products';
+import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
 
 const payments = [
   { icon: 'cash', name: 'Cash on Delivery', desc: 'Pay when your water arrives.' },
@@ -13,15 +12,7 @@ const payments = [
 ];
 
 export default function Products() {
-  // null = status check hasn't landed yet — show everything rather than flash-hide.
-  const [activeSkus, setActiveSkus] = useState(null);
-  useEffect(() => {
-    fetch('/api/ordering-status')
-      .then((r) => r.json())
-      .then((d) => setActiveSkus(d.activeSkus ?? null))
-      .catch(() => {});
-  }, []);
-  const visibleProducts = activeSkus ? PRODUCTS.filter((p) => activeSkus.includes(p.id)) : PRODUCTS;
+  const catalog = useStorefrontCatalog();
 
   return (
     <Layout title="Products & Pricing — Anchor Drops">
@@ -33,23 +24,25 @@ export default function Products() {
       </section>
 
       <section className="max-w-6xl mx-auto px-4 py-14 reveal">
+        {!catalog?.products && <p role="status">{catalog ? 'Current prices are temporarily unavailable.' : 'Loading current prices…'}</p>}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {visibleProducts.map((p) => (
+          {catalog?.products?.map((p) => (
             <ClayCard key={p.id} className="p-7 flex flex-col">
-              <span className="self-center text-xs font-extrabold text-white rounded-full px-4 py-1.5 mb-4 clay-btn-primary">{p.tag}</span>
+              {p.tag && <span className="self-center text-xs font-extrabold text-white rounded-full px-4 py-1.5 mb-4 clay-btn-primary">{p.tag}</span>}
               <h2 className="text-xl font-editorial font-semibold text-clay-ink text-center mb-1">{p.name}</h2>
               <p className="text-clay-muted text-sm text-center mb-6 font-semibold">{p.description}</p>
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between items-center clay-inset rounded-xl px-4 py-2.5">
-                  <span className="text-clay-muted text-sm font-semibold">Refill only</span>
+                  <span className="text-clay-muted text-sm font-semibold">{p.kind === 'refill' ? 'Refill only' : `Per ${productUnit(p)}`}</span>
                   <span className="font-editorial text-clay-skydeep font-bold text-lg">₱{p.refill}</span>
                 </div>
-                <div className="flex justify-between items-center clay-inset rounded-xl px-4 py-2.5">
-                  <span className="text-clay-muted text-sm font-semibold">Container + refill</span>
-                  <span className="font-editorial text-clay-skydeep font-bold text-lg">₱{p.refill + p.container}</span>
-                </div>
+                {p.kind === 'refill' && p.container > 0 && <div className="flex justify-between items-center clay-inset rounded-xl px-4 py-2.5">
+                  <span className="text-clay-muted text-sm font-semibold">New round container + first fill</span>
+                  <span className="font-editorial text-clay-skydeep font-bold text-lg">₱{Number((p.refill + p.container).toFixed(2))}</span>
+                </div>}
+                {p.kind === 'bottle' && <p className="text-clay-muted text-sm text-center">Store pickup or delivery</p>}
               </div>
-              <ClayButton href={`/order?product=${p.id}`} className="mt-auto w-full">ORDER WATER</ClayButton>
+              {p.kind !== 'info' && <ClayButton href={`/order?product=${encodeURIComponent(p.id)}`} className="mt-auto w-full">ORDER WATER</ClayButton>}
             </ClayCard>
           ))}
         </div>

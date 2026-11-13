@@ -2,7 +2,6 @@ import { getSupabase } from '@/lib/supabaseAdmin';
 import { DEFAULT_BRANCH_ID } from '@/lib/constants';
 import { rateLimit } from '@/lib/rate-limit';
 import { timingSafeEqual } from '@/lib/auth';
-import { PRODUCTS, PRODUCTS_BY_ID } from '@/lib/products';
 import { matchBarangay } from '@/lib/service-area';
 import {
   isValidPhonePH, isPlausibleAddress,
@@ -70,15 +69,6 @@ export default async function handler(req, res) {
   // "resolve this manually" sentinel for that case. A barangay that does match
   // is canonicalised so the delivery route groups it with the web orders.
   const barangay = matchBarangay(b.barangay) || 'TBD (via Messenger)';
-  // This intake always ends in a delivery — it requires a delivery address and
-  // files a delivery order. A store-pickup SKU here would sell the walk-in price
-  // with a delivery run attached, so it resolves to the delivery product of the
-  // same container type instead. Unknown SKUs keep the existing 'slim5' default.
-  const requestedKey = PRODUCTS_BY_ID[b.product_type] ? b.product_type : 'slim5';
-  const productKey = PRODUCTS_BY_ID[requestedKey].fulfillment === 'pickup'
-    ? (PRODUCTS.find((p) => p.fulfillment === 'delivery' && p.size === PRODUCTS_BY_ID[requestedKey].size)?.id ?? 'slim5')
-    : requestedKey;
-
   if (!phone || !address || !gallons) {
     return res.status(400).json({ error: 'Missing required fields: need phone, address, and quantity' });
   }
@@ -93,7 +83,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Please send a complete delivery address.' });
   }
 
-  const product = PRODUCTS_BY_ID[productKey];
+  const supabase = getSupabase();
+  // The Messenger form takes gallon quantities and has no pin for bottled-water delivery.
+  const productKey = b.product_type === 'slim5' ? 'slim5' : 'round5';
+  const { data: product, error: productError } = await supabase.from('products')
+    .select('size')
+    .eq('sku', productKey).eq('kind', 'refill').eq('is_pickup', false)
+    .eq('is_active', true).eq('sold_out', false).maybeSingle();
+  if (productError) return res.status(503).json({ error: 'Could not load the product catalog.' });
+  if (!product) return res.status(400).json({ error: 'This refill is unavailable.' });
   const perContainer = product.size === '3-Gal' ? 3 : 5;
   const quantity = Math.max(1, Math.round(gallons / perContainer));
   // Always a delivery (see productKey above), so the minimum always applies.
@@ -104,7 +102,6 @@ export default async function handler(req, res) {
     `Ordered via Facebook Messenger (${gallons} gal requested)` +
     (b.notes ? ` — ${b.notes}` : '');
 
-  const supabase = getSupabase();
   // Every stored spelling of this number — see phoneVariants() for why a single
   // key is not enough.
   const phoneKeys = phoneVariants(phone);

@@ -14,8 +14,8 @@ export default function Receipt({ receipt }) {
           <h1 className="text-2xl font-black leading-none">ANCHOR DROPS</h1>
           <p className="text-[10px] font-bold tracking-wide">WATER REFILLING STATION</p>
         </div>
-        <div className="border border-black rounded px-2 py-1 text-xs font-semibold whitespace-nowrap">
-          No. {receipt.transaction_id}
+        <div className="border border-black rounded px-2 py-1 text-xs font-semibold whitespace-nowrap" title={receipt.transaction_id}>
+          No. {receipt.transaction_id?.slice(0, 16)}
         </div>
       </div>
 
@@ -45,17 +45,17 @@ export default function Receipt({ receipt }) {
                 {l.product_name}{l.need_container ? ` (+${l.container_quantity} container)` : ''}
               </td>
               <td className="border border-black px-2 py-1 text-center">
-                {(l.line_total / l.quantity).toFixed(0)}
+                {(l.refill_subtotal == null ? l.line_total / l.quantity : l.refill_subtotal / l.quantity).toFixed(2)}
               </td>
-              <td className="border border-black px-2 py-1 text-center">{l.line_total.toFixed(0)}</td>
+              <td className="border border-black px-2 py-1 text-center">{(l.refill_subtotal == null ? l.line_total : l.refill_subtotal + l.container_subtotal).toFixed(2)}</td>
             </tr>
           ))}
           {receipt.delivery_fee > 0 && (
             <tr className="border border-black">
               <td className="border border-black px-2 py-1 text-center">1</td>
               <td className="border border-black px-2 py-1">Delivery fee</td>
-              <td className="border border-black px-2 py-1 text-center">{receipt.delivery_fee.toFixed(0)}</td>
-              <td className="border border-black px-2 py-1 text-center">{receipt.delivery_fee.toFixed(0)}</td>
+              <td className="border border-black px-2 py-1 text-center">{receipt.delivery_fee.toFixed(2)}</td>
+              <td className="border border-black px-2 py-1 text-center">{receipt.delivery_fee.toFixed(2)}</td>
             </tr>
           )}
           {receipt.voucher_discount_total > 0 && (
@@ -63,7 +63,7 @@ export default function Receipt({ receipt }) {
               <td className="border border-black px-2 py-1 text-center">{receipt.voucher_count_total}</td>
               <td className="border border-black px-2 py-1">Voucher discount</td>
               <td className="border border-black px-2 py-1 text-center">-</td>
-              <td className="border border-black px-2 py-1 text-center">-{receipt.voucher_discount_total.toFixed(0)}</td>
+              <td className="border border-black px-2 py-1 text-center">-{receipt.voucher_discount_total.toFixed(2)}</td>
             </tr>
           )}
           {/* Blank ruled rows to match the pad's fixed line count */}
@@ -75,7 +75,7 @@ export default function Receipt({ receipt }) {
           <tr className="border border-black">
             <td className="border border-black" colSpan={2} />
             <td className="border border-black px-2 py-1 text-right font-bold">TOTAL:</td>
-            <td className="border border-black px-2 py-1 text-center font-bold">{receipt.total_amount.toFixed(0)}</td>
+            <td className="border border-black px-2 py-1 text-center font-bold">{receipt.total_amount.toFixed(2)}</td>
           </tr>
         </tbody>
       </table>
@@ -103,6 +103,8 @@ export default function Receipt({ receipt }) {
 export function orderToReceipt(o) {
   const total = Number(o.total_amount) || 0;
   const discount = Number(o.voucher_discount) || 0;
+  const fee = Number(o.delivery_fee) || 0;
+  const containerSubtotal = Number(o.catalog_container_price || 0) * o.container_quantity;
   return {
     transaction_id: o.order_number || o.transaction_id || o.id,
     created_at: o.created_at,
@@ -110,19 +112,19 @@ export function orderToReceipt(o) {
     phone: o.phone,
     address: o.address,
     barangay: o.barangay,
-    fulfillment_type: 'delivery',
+    fulfillment_type: o.fulfillment ?? (o.address?.startsWith('Store pickup') ? 'pickup' : 'delivery'),
     lines: [{
       order_id: o.id,
-      product_name: o.product_type,
+      product_name: o.catalog_product_name || o.product_type,
       quantity: o.quantity,
       need_container: !!o.need_container,
       container_quantity: o.container_quantity,
+      refill_subtotal: o.catalog_refill_price == null ? total + discount - fee - containerSubtotal : Number(o.catalog_refill_price) * o.quantity,
+      container_subtotal: containerSubtotal,
       line_total: total,
     }],
-    // ponytail: delivery fee isn't stored separately on the order row, so it is
-    // folded into the subtotal rather than guessed from the tier table.
-    subtotal: total + discount,
-    delivery_fee: 0,
+    subtotal: total + discount - fee,
+    delivery_fee: fee,
     voucher_count_total: Number(o.voucher_count) || 0,
     voucher_discount_total: discount,
     total_amount: total,

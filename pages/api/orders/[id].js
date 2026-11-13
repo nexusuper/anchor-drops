@@ -7,6 +7,7 @@ import { buildStatusMessage, NOTIFIABLE_STATUSES } from '@/lib/notifications';
 import { sendMessengerMessage } from '@/lib/facebook';
 import { recordContainerMove } from '@/lib/containers';
 import { ORDER_NUMBER_RE } from '@/lib/order-number';
+import { STORE_PICKUP_ADDRESS } from '@/lib/products';
 import { z } from 'zod';
 
 const PatchSchema = z.object({
@@ -48,6 +49,12 @@ export default async function handler(req, res) {
 
     const { data: order, error } = await byIdOrNumber(supabase.from('orders').select('*'), id).single();
     if (error || !order) return res.status(404).json({ error: 'Order not found' });
+    const { data: product } = await supabase.from('products').select('name,kind').eq('sku', order.product_type).maybeSingle();
+    const display = {
+      product_name: product?.name ?? order.product_type,
+      product_kind: product?.kind,
+      fulfillment: order.fulfillment ?? (order.address === STORE_PICKUP_ADDRESS ? 'pickup' : 'delivery'),
+    };
 
     if (!await verifyAdminSoftLockout(req)) {
       if (!phoneMatches(req.query.phone, order.phone)) {
@@ -59,6 +66,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           status: order.status, created_at: order.created_at,
           product_type: order.product_type, container_size: order.container_size,
+          ...display,
           quantity: order.quantity, total_amount: order.total_amount,
           customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,
           voucher_count: order.voucher_count, voucher_discount: order.voucher_discount,
@@ -72,6 +80,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         id: order.id, order_number: order.order_number, status: order.status, created_at: order.created_at,
         product_type: order.product_type, container_size: order.container_size,
+        ...display,
         quantity: order.quantity, total_amount: order.total_amount,
         customer_name: order.customer_name, phone: order.phone, address: order.address, barangay: order.barangay,
         notes: order.notes, payment_method: order.payment_method,
@@ -83,6 +92,7 @@ export default async function handler(req, res) {
         pickup_date: order.pickup_date, pickup_time: order.pickup_time,
         delivery_time: order.delivery_time,
         payment_verified: order.payment_verified,
+        delivery_fee: order.delivery_fee,
       });
     }
 
@@ -152,7 +162,14 @@ export default async function handler(req, res) {
       const { data: order } = await supabase.from('orders').select('*').eq('id', id).single();
       if (!order) return res.status(404).json({ error: 'Order not found' });
 
-      await supabase.from('orders').update({ status }).eq('id', id);
+      if (order.status === status) return res.status(200).json({ success: true });
+      const { data: updated, error: statusError } = await supabase.from('orders')
+        .update({ status }).eq('id', id).eq('status', order.status).select('id').maybeSingle();
+      if (statusError) {
+        console.error('Order status update failed:', statusError.code);
+        return res.status(500).json({ error: 'Failed to update order' });
+      }
+      if (!updated) return res.status(409).json({ error: 'Order status changed. Refresh and try again.' });
 
       if (NOTIFIABLE_STATUSES.includes(status) && order.messenger_psid) {
         try {
@@ -187,7 +204,8 @@ export default async function handler(req, res) {
       // ponytail: guard on the pre-update status, not a new column — old schema's
       // inventory_deducted flag has no equivalent here, but "was it already
       // delivered" is the same idempotency check with one fewer table.
-      if (status === 'delivered' && order.status !== 'delivered') {
+      const stockHandledByDatabase = order.product_type === 'slim_jug' || order.product_type.startsWith('bottle_');
+      if (status === 'delivered' && order.status !== 'delivered' && !stockHandledByDatabase) {
         // Containers handed over on this delivery. Same guard as the inventory
         // deduct, so it is idempotent for the same reason.
         if (order.need_container) {

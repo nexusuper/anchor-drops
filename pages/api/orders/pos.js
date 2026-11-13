@@ -1,18 +1,17 @@
 import { getSupabase } from '@/lib/supabaseAdmin';
 import { DEFAULT_BRANCH_ID } from '@/lib/constants';
-import { computeRewards, normalizePhone, maxRedeemable, VOUCHER_VALUE } from '@/lib/loyalty';
+import { computeRewards, normalizePhone, maxRedeemable } from '@/lib/loyalty';
 import { verifyAdminWithLockout } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { PRODUCTS_BY_ID } from '@/lib/products';
-import { recordContainerMove } from '@/lib/containers';
-import { isPhoneBlocked, meetsDeliveryMinimum, DELIVERY_MIN_MESSAGE } from '@/lib/order-guard';
+import { isPhoneBlocked } from '@/lib/order-guard';
 import { loadBlocklistSafe } from '@/lib/blocklist';
 import { z } from 'zod';
-import crypto from 'node:crypto';
 
+export const config = { api: { bodyParser: { sizeLimit: '24kb' } } };
 const posRate = rateLimit({ windowMs: 60_000, max: 20 });
 
 const POSLineSchema = z.object({
+  id: z.string().uuid(),
   product_type: z.string().min(1).max(50),
   quantity: z.coerce.number().int().min(1).max(50),
   need_container: z.boolean().or(z.literal(0)).or(z.literal(1)).optional().default(false),
@@ -20,6 +19,17 @@ const POSLineSchema = z.object({
 });
 
 const POSOrderSchema = z.object({
+  sale_id: z.string().uuid(),
+  expected_subtotal: z.number().nonnegative(),
+  expected_delivery_fee: z.number().nonnegative(),
+  expected_voucher_discount: z.number().nonnegative(),
+  expected_prices: z.array(z.object({
+    sku: z.string().min(1).max(50),
+    refill_price: z.number().nonnegative(),
+    container_price: z.number().nonnegative(),
+  })).min(1).max(20),
+  lat: z.number().min(-90).max(90).nullish(),
+  lng: z.number().min(-180).max(180).nullish(),
   customer_name: z.string().min(1).max(200),
   phone: z.string().min(7).max(20),
   fulfillment_type: z.enum(['pickup', 'delivery']),
@@ -47,6 +57,9 @@ export default async function handler(req, res) {
   }
   if (!(await posRate(req, res))) return;
   if (!await verifyAdminWithLockout(req, res)) return;
+  if (req.body?.lines?.length > 20 || req.body?.expected_prices?.length > 20) {
+    return res.status(400).json({ error: 'Choose between 1 and 20 order lines.' });
+  }
 
   const parsed = POSOrderSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -57,43 +70,53 @@ export default async function handler(req, res) {
     address, barangay, delivery_slot, delivery_date,
     lines, payment_method, cash_tendered,
     gcash_number, reference_number, notes,
-    redeem_vouchers,
+    redeem_vouchers, sale_id, expected_subtotal, expected_delivery_fee, expected_voucher_discount, expected_prices, lat, lng,
   } = parsed.data;
 
   const supabase = getSupabase();
 
-  const resolvedLines = [];
-  for (const line of lines) {
-    const product = PRODUCTS_BY_ID[line.product_type];
-    if (!product) {
-      return res.status(400).json({ error: `Unknown product: ${line.product_type}` });
-    }
-    const refill_subtotal = product.refill * line.quantity;
-    const container_subtotal = line.need_container ? product.container * (line.container_quantity || 0) : 0;
-    resolvedLines.push({
-      product_type: line.product_type,
-      product_name: product.name,
-      container_size: product.size,
-      quantity: line.quantity,
-      need_container: !!line.need_container,
-      container_quantity: line.container_quantity || 0,
-      refill_subtotal,
-      container_subtotal,
-      line_base: refill_subtotal + container_subtotal,
-    });
-  }
-
   const isPickup = fulfillment_type === 'pickup';
-  const totalQuantity = resolvedLines.reduce((sum, l) => sum + l.quantity, 0);
-  const totalRefillSubtotal = resolvedLines.reduce((sum, l) => sum + l.refill_subtotal, 0);
-  const cartDeliveryFee = 0; // delivery fee retired — pricing is all-in on the product price now
-
-  if (!meetsDeliveryMinimum(isPickup, totalQuantity)) {
-    return res.status(400).json({ error: DELIVERY_MIN_MESSAGE });
+  const transaction_id = 'TX-' + sale_id;
+  const ids = lines.map(({ id }) => id);
+  const catalogLines = lines.map((line) => ({
+    sku: line.product_type,
+    quantity: line.quantity,
+    container_quantity: line.need_container ? line.container_quantity : 0,
+  }));
+  const { data: previous, error: previousError } = await supabase.from('orders')
+    .select('id,product_type,voucher_count').eq('transaction_id', transaction_id).eq('branch_id', DEFAULT_BRANCH_ID);
+  if (previousError) return res.status(503).json({ error: 'Could not verify sale status. Please try again.' });
+  if (previous.length && (previous.length !== ids.length || !ids.every((id) => previous.some((order) => order.id === id)))) {
+    return res.status(409).json({ error: 'Sale ID already in use.' });
   }
+  const { data: quote, error: quoteError } = previous.length ? {} : await supabase.rpc('quote_catalog_order', {
+    p_lines: catalogLines, p_fulfillment: fulfillment_type, p_lat: lat ?? null, p_lng: lng ?? null,
+  });
+  if (quoteError) {
+    if (quoteError.code === '22023') return res.status(400).json({ error: quoteError.message });
+    return res.status(503).json({ error: 'Could not load current prices. Please try again.' });
+  }
+  const pricesChanged = quote && (quote.lines.length !== expected_prices.length || quote.lines.some((line, index) => {
+    const expected = expected_prices[index];
+    return line.sku !== expected.sku || line.refill_price !== expected.refill_price || line.container_price !== expected.container_price;
+  }));
+  if (quote && (pricesChanged || quote.subtotal !== expected_subtotal || quote.delivery_fee !== expected_delivery_fee)) {
+    return res.status(409).json({ error: 'Prices changed. Review the updated total and confirm again.', quote });
+  }
+  const resolvedLines = catalogLines.map((line, index) => {
+    const product = quote?.lines[index];
+    return {
+      ...line, id: ids[index],
+      kind: product?.kind,
+      refill_subtotal: Number(product?.refill_price ?? 0) * line.quantity,
+    };
+  });
+  const refillLines = resolvedLines.filter((line) => line.kind === 'refill');
+  const totalQuantity = refillLines.reduce((sum, line) => sum + line.quantity, 0);
+  const totalRefillSubtotal = refillLines.reduce((sum, line) => sum + line.refill_subtotal, 0);
 
   // Staff-keyed, so say why. Pickups are exempt: no rider trip to waste.
-  if (!isPickup && isPhoneBlocked(phone, await loadBlocklistSafe(supabase))) {
+  if (!previous.length && !isPickup && isPhoneBlocked(phone, await loadBlocklistSafe(supabase))) {
     return res.status(403).json({ error: 'This number is on the blocklist. Delivery refused.' });
   }
 
@@ -109,152 +132,71 @@ export default async function handler(req, res) {
   else available = computeRewards(prior || []).available;
   // Redeeming against an unknown balance silently drops the customer's
   // vouchers, so refuse. Sales with no redemption are unaffected.
-  if (priorErr && redeem_vouchers > 0) {
+  if (!previous.length && priorErr && redeem_vouchers > 0) {
     return res.status(503).json({ error: 'Could not verify the rewards balance. Please try again.' });
   }
 
   const maxAllowedVouchers = maxRedeemable({ available, quantity: totalQuantity, refillSubtotal: totalRefillSubtotal });
-  const appliedVouchers = Math.min(redeem_vouchers, maxAllowedVouchers);
+  let remainingVouchers = Math.min(redeem_vouchers, maxAllowedVouchers);
+  const pricedLines = resolvedLines.map((line) => {
+    const voucher_count = previous.length ? previous.find((order) => order.id === line.id).voucher_count
+      : line.kind === 'refill' ? Math.min(remainingVouchers, line.quantity) : 0;
+    remainingVouchers -= voucher_count;
+    return { id: line.id, sku: line.sku, quantity: line.quantity, container_quantity: line.container_quantity, voucher_count };
+  });
 
-  let remainingVouchers = appliedVouchers;
-  for (const line of resolvedLines) {
-    const take = Math.min(remainingVouchers, line.quantity);
-    line.voucher_count = take;
-    // Clamped to the line's refill value — a voucher buys refills, not
-    // containers, and never pays out the difference on a refill cheaper than
-    // VOUCHER_VALUE. Mirrors the clamp in create_order (migration 0039).
-    line.voucher_discount = Math.min(take * VOUCHER_VALUE, line.refill_subtotal);
-    remainingVouchers -= take;
-  }
-
-  const voucherDiscountTotal = resolvedLines.reduce((sum, l) => sum + l.voucher_discount, 0);
-  const cartSubtotal = resolvedLines.reduce((sum, l) => sum + l.line_base, 0);
-  const totalAmount = Math.max(0, cartSubtotal + cartDeliveryFee - voucherDiscountTotal);
-  const changeDue = payment_method === 'cod' && cash_tendered != null
-    ? Math.max(0, cash_tendered - totalAmount)
-    : null;
-
-  resolvedLines[0].delivery_fee = cartDeliveryFee;
-  for (let i = 1; i < resolvedLines.length; i++) resolvedLines[i].delivery_fee = 0;
-  for (const line of resolvedLines) {
-    line.line_total = Math.max(0, line.line_base + line.delivery_fee - line.voucher_discount);
-  }
-
-  const status = isPickup ? 'delivered' : 'pending';
-  const transaction_id = 'TX-' + crypto.randomUUID().slice(0, 8).toUpperCase();
-  const pickupAddress = address || 'Counter Pickup';
-  const pickupBarangay = barangay || 'N/A';
-  const ct = payment_method === 'cod' && cash_tendered != null ? cash_tendered : null;
-
-  const createdOrders = [];
-  for (const line of resolvedLines) {
-    const { data: order, error } = await supabase.rpc('create_order', {
-      p_client_order_id: crypto.randomUUID(),
-      p_branch_id: DEFAULT_BRANCH_ID,
-      p_customer_name: customer_name,
-      p_phone: phone,
-      p_address: isPickup ? pickupAddress : address,
-      p_barangay: isPickup ? pickupBarangay : barangay,
-      p_address_label: 'Home',
-      p_product_type: line.product_type,
-      p_container_size: line.container_size,
-      p_quantity: line.quantity,
-      p_need_container: line.need_container,
-      p_container_quantity: line.container_quantity,
-      p_payment_method: payment_method === 'paymaya' ? 'gcash' : payment_method,
-      p_gcash_number: gcash_number || null,
-      p_reference_number: reference_number || null,
-      p_payment_screenshot_path: null,
-      p_notes: notes || null,
-      p_total_amount: 0,
-      p_sale_channel: 'pos',
-      p_cash_tendered: ct,
-      p_voucher_count: line.voucher_count,
-      p_reward_requested: 0,
-      // Validated above but previously never forwarded, so every POS delivery
-      // landed with a null window and only showed on the route sheet via its
-      // delivery_date.is.null fallback.
-      p_delivery_date: isPickup ? null : (delivery_date || null),
-      p_delivery_time: isPickup ? null : (delivery_slot || null),
-      // The fee is a cart-wide amount already apportioned onto line 0 above. The
-      // RPC would otherwise re-derive it from this line's own quantity, charging
-      // a counter pickup a fee it waived and a multi-line sale one fee per line.
-      p_delivery_fee: line.delivery_fee,
-      // POS counter-sale has no pin UI.
-      p_lat: null,
-      p_lng: null,
+  const ct = payment_method === 'cod' ? cash_tendered ?? null : null;
+  const { data: committed, error: saleError } = await supabase.rpc('create_catalog_pos', {
+      p_sale: {
+        transaction_id, branch_id: DEFAULT_BRANCH_ID, customer_name, phone, fulfillment: fulfillment_type,
+        address, barangay, delivery_date: delivery_date || null, delivery_time: delivery_slot || null,
+        lat: isPickup ? null : lat ?? null, lng: isPickup ? null : lng ?? null,
+        payment_method: payment_method === 'paymaya' ? 'gcash' : payment_method,
+        gcash_number: gcash_number || null, reference_number: reference_number || null, notes: notes || null,
+        cash_tendered: ct, expected_voucher_discount, expected_prices,
+      },
+      p_lines: pricedLines,
+      p_expected_subtotal: expected_subtotal,
+      p_expected_delivery_fee: expected_delivery_fee,
     });
-    if (error) {
-      console.error('POS sale insert failed:', error);
-      // ponytail: individual RPC calls can't share one client-side SQL
-      // transaction, so roll back by hand -- delete the lines already
-      // committed this loop so a failed multi-line sale doesn't leave a
-      // partial sale behind.
-      const createdIds = createdOrders.map((o) => o.id).filter(Boolean);
-      if (createdIds.length) {
-        const { error: cleanupErr } = await supabase.from('orders').delete().in('id', createdIds);
-        if (cleanupErr) console.error('POS partial-sale cleanup failed:', cleanupErr);
-      }
-      return res.status(500).json({ error: 'Failed to complete sale' });
-    }
-    await supabase.from('orders').update({ status, transaction_id }).eq('id', order.id);
-    line.order_id = order.id;
-    // Kept so the ledger row carries customer_id too — the staff app's balance
-    // reads key on it, the website's on phone_normalized.
-    line.customer_id = order.customer_id;
-    createdOrders.push(order);
+  if (saleError) {
+    if (saleError.code === 'PT409') return res.status(409).json({ error: 'Prices or rewards changed. Review the total and confirm again.' });
+    if (saleError.code === '22023') return res.status(400).json({ error: saleError.message });
+    console.error('POS sale failed:', saleError.code);
+    return res.status(500).json({ error: 'Failed to complete sale' });
   }
-
-  // Counter pickups are created already-delivered, so they never pass through
-  // the PATCH-to-delivered hook in orders/[id].js that records the rest. POS
-  // *deliveries* land as 'pending' and are recorded there, not here.
-  if (isPickup) {
-    for (const line of resolvedLines) {
-      if (line.need_container) {
-        await recordContainerMove(supabase, {
-          phone,
-          customerId: line.customer_id,
-          orderId: line.order_id,
-          delta: line.container_quantity,
-          kind: 'delivery_out',
-          note: `POS sale ${transaction_id}`,
-        });
-      }
-      try {
-        const { error: invErr } = await supabase.rpc('adjust_inventory', {
-          p_branch_id: DEFAULT_BRANCH_ID,
-          p_product_id: line.product_type,
-          p_delta: -line.quantity,
-          p_type: 'sale',
-          p_reason: `POS sale ${line.order_id}`,
-        });
-        if (invErr) console.error('POS inventory deduct failed for', line.product_type, invErr);
-      } catch (invErr) {
-        console.error('POS inventory deduct failed for', line.product_type, invErr);
-      }
-    }
-  }
+  const cartDeliveryFee = committed.reduce((sum, order) => sum + Number(order.delivery_fee ?? 0), 0);
+  const voucherDiscountTotal = committed.reduce((sum, order) => sum + Number(order.voucher_discount ?? 0), 0);
+  const appliedVouchers = committed.reduce((sum, order) => sum + order.voucher_count, 0);
+  const totalAmount = committed.reduce((sum, order) => sum + Number(order.total_amount), 0);
+  const cartSubtotal = totalAmount - cartDeliveryFee + voucherDiscountTotal;
+  const changeDue = ct == null ? null : Math.max(0, ct - totalAmount);
 
   return res.status(201).json({
     transaction_id,
-    created_at: createdOrders[0]?.created_at,
+    created_at: committed[0]?.created_at,
     fulfillment_type,
     customer_name,
     phone,
-    lines: resolvedLines.map((l) => ({
-      order_id: l.order_id,
-      product_type: l.product_type,
-      product_name: l.product_name,
-      quantity: l.quantity,
-      refill_subtotal: l.refill_subtotal,
-      need_container: l.need_container,
-      container_quantity: l.container_quantity,
-      container_subtotal: l.container_subtotal,
-      voucher_count: l.voucher_count,
-      voucher_discount: l.voucher_discount,
-      line_total: l.line_total,
-      status,
-    })),
+    address: isPickup ? '' : address,
+    barangay: isPickup ? '' : barangay,
+    lines: committed.map((order) => {
+      const containerSubtotal = Number(order.catalog_container_price) * order.container_quantity;
+      return {
+        order_id: order.id,
+        product_type: order.product_type,
+        product_name: order.catalog_product_name ?? order.product_type,
+        quantity: order.quantity,
+        refill_subtotal: Number(order.total_amount) - Number(order.delivery_fee ?? 0) + Number(order.voucher_discount ?? 0) - containerSubtotal,
+        need_container: order.need_container,
+        container_quantity: order.container_quantity,
+        container_subtotal: containerSubtotal,
+        voucher_count: order.voucher_count,
+        voucher_discount: order.voucher_discount,
+        line_total: order.total_amount,
+        status: order.status,
+      };
+    }),
     delivery_fee: cartDeliveryFee,
     subtotal: cartSubtotal,
     voucher_count_total: appliedVouchers,
@@ -263,6 +205,6 @@ export default async function handler(req, res) {
     payment_method,
     cash_tendered: ct,
     change_due: changeDue,
-    loyalty_available_after: Math.max(0, available - appliedVouchers),
+    loyalty_available_after: Math.max(0, available - (previous.length ? 0 : appliedVouchers)),
   });
 }

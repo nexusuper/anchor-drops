@@ -6,11 +6,11 @@ import { trackPurchase } from '@/pages/_app';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
-import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
+import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, STORE_ADDRESS_DISPLAY } from '@/lib/products';
 import { STORE_HOURS_LABEL } from '@/lib/scheduling';
 import { readOrderPhone } from '@/lib/client-storage';
 import { ORDER_STATUS } from '@/lib/order-status';
-import { sizeLabel } from '@/lib/products';
+import { productUnit } from '@/lib/storefront-catalog';
 
 const DELIVERY_SLOT_LABELS = {
   pickup: 'Counter pickup',
@@ -70,7 +70,9 @@ export default function Confirmation() {
   // effect body cascades renders.
   useEffect(() => { if (id) queueMicrotask(() => load(readOrderPhone())); }, [id, load]);
 
+  const isPickup = order?.fulfillment === 'pickup';
   const status = order ? STATUS_LABELS[order.status] : null;
+  const unit = order && productUnit({ id: order.product_type, kind: order.product_kind });
   // The API withholds both handles unless the phone matched, so fall back to the
   // one already in this page's URL rather than rendering a blank order id.
   const handle = order?.order_number || order?.id || id || '';
@@ -164,7 +166,7 @@ export default function Confirmation() {
               <div className="space-y-2 text-base">
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Status</span>
-                  <span className={`font-semibold px-2 py-0.5 rounded-full text-xs ${status?.color}`}>{status?.label}</span>
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-xs ${status?.color}`}>{isPickup && order.status === 'delivered' ? 'Picked up ✓' : status?.label}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Name</span>
@@ -175,20 +177,20 @@ export default function Confirmation() {
                   <span className="font-medium">{order.phone}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-clay-muted">Address</span>
-                  <span className="font-medium text-right max-w-[60%]">{order.address}, {order.barangay}</span>
+                  <span className="text-clay-muted">{isPickup ? 'Store pickup' : 'Address'}</span>
+                  <span className="font-medium text-right max-w-[60%]">{isPickup ? STORE_ADDRESS_DISPLAY : [order.address, order.barangay].filter(Boolean).join(', ')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Product</span>
-                  <span className="font-medium">{order.product_type} ({sizeLabel(order.container_size)})</span>
+                  <span className="font-medium">{order.product_name ?? order.product_type}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Quantity</span>
-                  <span className="font-medium">{order.quantity} refill(s)</span>
+                  <span className="font-medium">{order.quantity} {unit}{order.quantity === 1 ? '' : 's'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Payment</span>
-                  <span className="font-medium capitalize">{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method}</span>
+                  <span className="font-medium capitalize">{order.payment_method === 'cod' ? (isPickup ? 'Cash at the store' : 'Cash on delivery') : order.payment_method}</span>
                 </div>
                 {order.payment_verified != null && order.payment_method !== 'cod' && (
                   <div className="flex justify-between">
@@ -212,8 +214,14 @@ export default function Confirmation() {
                 ) : null}
                 {order.delivery_time && (
                   <div className="flex justify-between">
-                    <span className="text-clay-muted">Delivery</span>
+                    <span className="text-clay-muted">{isPickup ? 'Scheduled store pickup' : 'Delivery'}</span>
                     <span className="font-medium">{order.delivery_date} {order.delivery_time}</span>
+                  </div>
+                )}
+                {!isPickup && order.delivery_fee != null && (
+                  <div className="flex justify-between">
+                    <span className="text-clay-muted">Delivery fee</span>
+                    <span className="font-medium">{Number(order.delivery_fee) ? `₱${order.delivery_fee}` : 'Free'}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-sky-50 pt-2">
@@ -235,9 +243,9 @@ export default function Confirmation() {
                 Free refill requested ×{order.reward_requested} — we&apos;ll apply it when we confirm your delivery.
               </ClayCard>
             )}
-            <p className="text-center text-xs text-clay-muted">
-              Earning free refills with every order — <Link href="/rewards" className="text-clay-skydeep font-semibold hover:underline">check your rewards</Link>.
-            </p>
+            {unit === 'refill' && <p className="text-center text-xs text-clay-muted">
+              Earn free refills on gallon refill orders. <Link href="/rewards" className="text-clay-skydeep font-semibold hover:underline">Check your rewards</Link>.
+            </p>}
 
             {screenshot === '0' && (
               <ClayCard variant="inset" className="p-4 text-center text-sm font-semibold text-clay-danger">
@@ -247,11 +255,11 @@ export default function Confirmation() {
             )}
 
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep">
-              {order.phone && (
+              {order.phone && !isPickup && (
                 <><ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.<br /></>
               )}
               {order.delivery_date ? (
-                <>Scheduled delivery: <strong>{order.delivery_date}{order.delivery_time ? ` at ${order.delivery_time}` : ''}</strong>.</>
+                <>{isPickup ? 'Scheduled store pickup' : 'Scheduled delivery'} at <strong>{order.delivery_date}{order.delivery_time ? ` · ${order.delivery_time}` : ''}</strong>.</>
               ) : (
                 <>Store hours: <strong>{STORE_HOURS_LABEL}</strong>.</>
               )}

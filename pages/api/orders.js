@@ -5,7 +5,7 @@ import { computeRewards, normalizePhone, phoneMatches } from '@/lib/loyalty';
 import { hashCode, CODE_MAX_ATTEMPTS } from '@/lib/reward-codes';
 import { verifyAdminWithLockout, timingSafeEqual } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { PRODUCTS_BY_ID, STORE_PICKUP_ADDRESS, STORE_PICKUP_BARANGAY } from '@/lib/products';
+import { STORE_PICKUP_ADDRESS, STORE_PICKUP_BARANGAY } from '@/lib/products';
 import { validateSchedule, manilaToday, manilaNowTime } from '@/lib/scheduling';
 import { matchBarangay } from '@/lib/service-area';
 import {
@@ -28,6 +28,7 @@ const OrderSchema = z.object({
   address: z.string().max(500).optional().nullable(),
   barangay: z.string().max(200).optional().nullable(),
   product_type: z.string().min(1).max(50),
+  fulfillment: z.enum(['pickup', 'delivery']),
   container_size: z.string().min(1).max(20),
   quantity: z.coerce.number().int().min(1).max(50),
   need_container: z.boolean().or(z.literal(0)).or(z.literal(1)).optional().default(false),
@@ -42,7 +43,8 @@ const OrderSchema = z.object({
     .optional()
     .nullable(),
   notes: z.string().max(1000).optional().nullable(),
-  total_amount: z.coerce.number().min(0),
+  total_amount: z.number().finite().min(0),
+  delivery_fee: z.number().finite().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
   reward_code: z.string().max(10).optional().nullable(),
   has_empty_containers: z.boolean().or(z.literal(0)).or(z.literal(1)).optional().default(false),
@@ -53,8 +55,8 @@ const OrderSchema = z.object({
   // Client-generated idempotency key. create_order dedupes on it, so a retry
   // after a network timeout returns the original order instead of a duplicate.
   client_order_id: z.string().uuid().optional().nullable(),
-  lat: z.coerce.number().gte(-90).lte(90).nullish(),
-  lng: z.coerce.number().gte(-180).lte(180).nullish(),
+  lat: z.number().finite().gte(-90).lte(90).nullish(),
+  lng: z.number().finite().gte(-180).lte(180).nullish(),
 });
 
 export default async function handler(req, res) {
@@ -155,18 +157,13 @@ export default async function handler(req, res) {
     }
     const {
       customer_name, phone, address, barangay,
-      product_type, quantity,
+      product_type, quantity, fulfillment, total_amount, delivery_fee,
       need_container, container_quantity,
       payment_method, gcash_number, reference_number, payment_screenshot,
       notes, reward_requested, reward_code,
       has_empty_containers, pickupDate, pickupTime, deliveryDate, deliveryTime,
       client_order_id, lat, lng,
     } = parsed.data;
-
-    const product = PRODUCTS_BY_ID[product_type];
-    if (!product) {
-      return res.status(400).json({ error: 'Unknown product' });
-    }
 
     // Junk filter. Zod only bounds length, so a one-character address and a
     // name of digits both parsed as valid orders. These are the "plausibly
@@ -177,10 +174,36 @@ export default async function handler(req, res) {
     if (!isPlausibleName(customer_name)) {
       return res.status(400).json({ error: 'Please enter your name.' });
     }
-    // Store pickup: no address is collected, and no delivery/container-pickup
-    // run is scheduled — the chosen slot is when the customer comes to the store.
-    const storePickup = product.fulfillment === 'pickup';
-    if (!meetsDeliveryMinimum(storePickup, quantity)) {
+    try {
+    const supabase = getSupabase();
+    // Resolve retries before checking the live catalog, prices or schedule.
+    if (client_order_id) {
+      const { data: existing, error: existingError } = await supabase
+        .from('orders').select('id, order_number, created_at, phone, payment_screenshot_path').eq('id', client_order_id).maybeSingle();
+      if (existingError) throw existingError;
+      if (existing) {
+        if (!phoneMatches(phone, existing.phone)) {
+          return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
+        }
+        return res.status(201).json({
+          id: existing.id, order_number: existing.order_number, created_at: existing.created_at,
+          screenshot_saved: !payment_screenshot || !!existing.payment_screenshot_path,
+        });
+      }
+    }
+
+    const { data: product, error: productError } = await supabase
+      .from('products').select('kind,size,is_pickup')
+      .eq('sku', product_type).eq('is_active', true).eq('sold_out', false)
+      .or('tag.is.null,tag.neq.supply').neq('kind', 'info').maybeSingle();
+    if (productError) throw productError;
+    if (!product) return res.status(400).json({ error: 'This product is unavailable.' });
+    const isRefill = product.kind === 'refill';
+    const storePickup = fulfillment === 'pickup';
+    if (product.kind !== 'bottle' && storePickup !== product.is_pickup) {
+      return res.status(400).json({ error: 'This product is unavailable for the selected fulfillment method.' });
+    }
+    if (isRefill && !meetsDeliveryMinimum(storePickup, quantity)) {
       return res.status(400).json({ error: DELIVERY_MIN_MESSAGE });
     }
     let orderAddress = STORE_PICKUP_ADDRESS;
@@ -198,10 +221,15 @@ export default async function handler(req, res) {
       }
     }
 
-    // A store pickup can never also be a container pickup run at the customer's
-    // home, whatever the client posted.
-    const hasEmptyContainers = !storePickup && !!has_empty_containers;
+    const containerQuantity = isRefill && need_container ? container_quantity : 0;
+    const hasEmptyContainers = isRefill && !storePickup && !need_container && !!has_empty_containers;
     const today = manilaToday();
+    const { data: orderingSetting, error: settingsError } = await supabase
+      .from('app_settings').select('value').eq('key', 'ordering_enabled').maybeSingle();
+    if (settingsError) throw settingsError;
+    if (orderingSetting && orderingSetting.value !== true) {
+      return res.status(503).json({ error: 'Online ordering is temporarily unavailable.' });
+    }
     const scheduleCheck = validateSchedule({
       hasEmptyContainers, pickupDate, pickupTime, deliveryDate, deliveryTime, today, nowTime: manilaNowTime(),
     });
@@ -209,13 +237,20 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: scheduleCheck.error });
     }
 
-    const containerSize = product.size;
-    // Everything below can throw (missing/invalid Supabase env, network, storage).
-    // Without this boundary an uncaught throw returns Next's HTML 500 page, which
-    // the client parses as JSON and surfaces as "Unexpected token '<'". Return
-    // JSON so the customer sees a real message and the cause lands in logs.
-    try {
-    const supabase = getSupabase();
+    const quoteArgs = {
+      p_lines: [{ sku: product_type, quantity, container_quantity: containerQuantity }],
+      p_fulfillment: fulfillment,
+      p_lat: storePickup ? null : lat ?? null,
+      p_lng: storePickup ? null : lng ?? null,
+    };
+    const { data: quote, error: quoteError } = await supabase.rpc('quote_catalog_order', quoteArgs);
+    if (quoteError?.code === '22023') return res.status(400).json({ error: quoteError.message, quoteUnavailable: true });
+    if (quoteError) throw quoteError;
+    const expectedTotal = Number((Number(quote.subtotal) + Number(quote.delivery_fee)).toFixed(2));
+    if (total_amount !== expectedTotal || delivery_fee !== Number(quote.delivery_fee)) {
+      return res.status(409).json({ error: 'The price changed. Review the new total before placing your order.', quote });
+    }
+
     const normPhone = normalizePhone(phone);
 
     // Strike policy: a phone whose orders the riders marked no_show loses COD,
@@ -274,24 +309,23 @@ export default async function handler(req, res) {
     // supabase-js resolves with { data: null, error } rather than throwing, so
     // the error has to be read explicitly or a failed lookup silently reads as
     // "no vouchers earned".
+    const requested = isRefill ? Math.min(reward_requested, quantity) : 0;
     let available = 0;
-    const { data: prior, error: priorErr } = await supabase
-      .from('orders')
-      .select('status, container_size, quantity, voucher_count')
-      .eq('phone_normalized', normPhone);
-    if (priorErr) console.error('Reward balance lookup failed:', priorErr);
-    else available = computeRewards(prior || []).available;
-
-    const requested = Math.max(0, Math.min(reward_requested || 0, quantity));
-    // Redeeming against an unknown balance marks the customer's code used but
-    // applies no discount, so refuse instead. Non-redeeming orders are
-    // unaffected by a failed lookup and still go through.
-    if (priorErr && requested > 0) {
-      return res.status(503).json({ error: 'Could not verify your rewards balance. Please try again.' });
+    if (requested > 0) {
+      const { data: prior, error: priorErr } = await supabase
+        .from('orders')
+        .select('status, container_size, quantity, voucher_count')
+        .eq('phone_normalized', normPhone);
+      if (priorErr) {
+        console.error('Reward balance lookup failed:', priorErr);
+        return res.status(503).json({ error: 'Could not verify your rewards balance. Please try again.' });
+      }
+      available = computeRewards(prior || []).available;
     }
 
     let voucher_count = 0;
     let reward_requested_store = 0;
+    let claimedRewardCodeId = null;
     if (requested > 0 && reward_code) {
       try {
         const { data: codeRows } = await supabase
@@ -312,6 +346,7 @@ export default async function handler(req, res) {
               .eq('used', false)
               .select('id');
             if (claimed && claimed.length > 0) {
+              claimedRewardCodeId = row.id;
               voucher_count = Math.min(requested, available);
             } else {
               reward_requested_store = requested;
@@ -334,41 +369,6 @@ export default async function handler(req, res) {
     }
 
     const id = client_order_id || crypto.randomUUID();
-
-    // client_order_id is an idempotency key, and create_order returns the
-    // EXISTING row unchanged when one already carries that id. Replaying a
-    // stranger's order id would otherwise sail past the RPC and still run every
-    // side effect below with this request's body — filing a container pickup
-    // that sends a rider to an attacker-supplied address under someone else's
-    // order number, and overwriting their payment proof. Resolve the dedupe here
-    // instead: if the row already exists, this request creates nothing, so it
-    // gets to change nothing either.
-    //
-    // ponytail: a pre-flight read, not a flag returned by the RPC — create_order
-    // returns `orders`, so signalling "was this a dedupe hit" means changing its
-    // return type and every caller (this repo + the staff app). Ceiling: two
-    // genuinely simultaneous retries can both miss this read and both file a
-    // pickup row. That duplicates the SAME customer's own request, so it is an
-    // ops nuisance rather than the impersonation this closes; upgrade to an RPC
-    // out-param if the duplicate rows ever show up in practice.
-    //
-    // The replay also has to prove the phone before it gets the order_number
-    // back: the id alone would otherwise be an oracle turning one handle into
-    // both halves of the self-cancel gate. A genuine retry posts the same body,
-    // so the same phone, and still receives the original order.
-    if (client_order_id) {
-      const { data: existing } = await supabase
-        .from('orders').select('id, order_number, created_at, phone').eq('id', client_order_id).single();
-      if (existing) {
-        if (!phoneMatches(phone, existing.phone)) {
-          return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
-        }
-        return res.status(201).json({
-          id: existing.id, order_number: existing.order_number, created_at: existing.created_at,
-          screenshot_saved: true,
-        });
-      }
-    }
 
     let screenshotSaved = true;
     let screenshotPath = null;
@@ -402,27 +402,25 @@ export default async function handler(req, res) {
       p_phone: phone,
       p_address: orderAddress,
       p_barangay: canonicalBarangay,
-      p_address_label: 'Home',
+      p_address_label: storePickup ? 'Store Pickup' : 'Delivery',
       p_product_type: product_type,
-      p_container_size: containerSize,
+      p_container_size: product.size,
       p_quantity: quantity,
-      p_need_container: !!need_container,
-      p_container_quantity: container_quantity || 0,
+      p_need_container: containerQuantity > 0,
+      p_container_quantity: containerQuantity,
       p_payment_method: payment_method,
       p_gcash_number: gcash_number || null,
       p_reference_number: reference_number || null,
       p_payment_screenshot_path: screenshotPath,
       p_notes: notes || null,
-      p_total_amount: 0,
+      p_total_amount: expectedTotal,
       p_sale_channel: 'online',
       p_cash_tendered: null,
       p_voucher_count: voucher_count,
       p_reward_requested: reward_requested_store,
       p_delivery_date: deliveryDate,
       p_delivery_time: deliveryTime,
-      // Persist the pickup window on the order itself, not just the
-      // container_pickups ops queue -- /api/orders/[id] derives
-      // has_empty_containers from orders.pickup_date, which was always null.
+      p_delivery_fee: Number(quote.delivery_fee),
       p_pickup_date: hasEmptyContainers ? pickupDate : null,
       p_pickup_time: hasEmptyContainers ? pickupTime : null,
       p_lat: storePickup ? null : (lat ?? null),
@@ -430,21 +428,29 @@ export default async function handler(req, res) {
     });
 
     if (rpcErr) {
+      if (['PT409', '22023', '23505'].includes(rpcErr.code)) {
+        if (claimedRewardCodeId) {
+          await supabase.from('reward_codes').update({ used: false }).eq('id', claimedRewardCodeId);
+        }
+        if (screenshotPath) await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
+        if (rpcErr.code === '23505') return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
+        if (rpcErr.code === '22023') return res.status(400).json({ error: rpcErr.message });
+        const { data: updated, error: updatedError } = await supabase.rpc('quote_catalog_order', quoteArgs);
+        if (updatedError?.code === '22023') return res.status(400).json({ error: updatedError.message, quoteUnavailable: true });
+        if (updatedError) throw updatedError;
+        return res.status(409).json({ error: 'The price changed. Review the new total before placing your order.', quote: updated });
+      }
       console.error('Order insert failed:', rpcErr);
       return res.status(500).json({ error: 'Failed to place order' });
     }
 
-    if (hasEmptyContainers) {
-      const { error: pickupErr } = await supabase.from('container_pickups').insert({
-        branch_id: DEFAULT_BRANCH_ID,
-        order_id: order.id,
-        customer_name, phone, address: orderAddress, barangay: canonicalBarangay,
-        container_qty: quantity,
-        pickup_date: pickupDate, pickup_time: pickupTime,
-        delivery_date: deliveryDate, delivery_time: deliveryTime,
-        status: 'scheduled', notes: '',
-      });
-      if (pickupErr) console.error('Container pickup insert failed:', pickupErr);
+    if (!phoneMatches(phone, order.phone)) {
+      if (screenshotPath) await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
+      return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
+    }
+    if (screenshotPath && screenshotPath !== order.payment_screenshot_path) {
+      await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
+      screenshotSaved = !!order.payment_screenshot_path;
     }
 
     return res.status(201).json({

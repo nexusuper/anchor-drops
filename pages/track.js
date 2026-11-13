@@ -5,6 +5,7 @@ import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL } from '@/lib/products';
 import { readOrderPhone, readIdentity } from '@/lib/client-storage';
+import { productUnit } from '@/lib/storefront-catalog';
 
 const STEPS = [
   { key: 'pending', label: 'Order Received', icon: 'clipboard', desc: 'Your order is in our queue.' },
@@ -13,10 +14,15 @@ const STEPS = [
   { key: 'delivered', label: 'Delivered', icon: 'party', desc: 'Your order has been delivered. Enjoy!' },
 ];
 
-const STATUS_ORDER = ['pending', 'confirmed', 'out_for_delivery', 'delivered'];
+const PICKUP_STEPS = [
+  STEPS[0],
+  { ...STEPS[1], desc: 'We are preparing your water for store pickup.' },
+  { ...STEPS[3], label: 'Picked up', desc: 'Your order was picked up at the store.' },
+];
 
-function StatusStepper({ status }) {
-  const currentIndex = STATUS_ORDER.indexOf(status);
+function StatusStepper({ status, isPickup }) {
+  const steps = isPickup ? PICKUP_STEPS : STEPS;
+  const currentIndex = steps.findIndex((step) => step.key === status);
   const isCancelled = status === 'cancelled';
 
   if (isCancelled) {
@@ -31,7 +37,7 @@ function StatusStepper({ status }) {
 
   return (
     <div className="space-y-0">
-      {STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i < currentIndex;
         const active = i === currentIndex;
         const upcoming = i > currentIndex;
@@ -42,12 +48,12 @@ function StatusStepper({ status }) {
               <div className={`w-10 h-10 rounded-full grid place-items-center shrink-0 ${done || active ? 'clay-btn-primary text-white' : 'clay-inset text-clay-muted'} ${active ? 'ring-4 ring-sky-100' : ''}`}>
                 <ClayIcon name={done ? 'check' : step.icon} className="w-5 h-5" />
               </div>
-              {i < STEPS.length - 1 && (
+              {i < steps.length - 1 && (
                 <div className={`w-0.5 flex-1 my-1 ${done ? 'bg-sky-400' : 'bg-gray-200'}`} style={{ minHeight: '2rem' }} />
               )}
             </div>
             {/* Content */}
-            <div className={`pb-6 ${i === STEPS.length - 1 ? 'pb-0' : ''}`}>
+            <div className={`pb-6 ${i === steps.length - 1 ? 'pb-0' : ''}`}>
               <p className={`font-bold ${active ? 'text-clay-skydeep' : done ? 'text-clay-ink2' : 'text-clay-muted'}`}>
                 {step.label}
                 {active && <span className="ml-2 text-xs bg-sky-100 text-sky-600 px-2 py-0.5 rounded-full">Current</span>}
@@ -286,6 +292,11 @@ export default function Track() {
 
               <div className="text-sm text-clay-muted mb-5 space-y-1">
                 <div><span className="font-medium text-clay-ink2">Name:</span> {order.customer_name}</div>
+                {order.product_name && (
+                  <div>
+                    <span className="font-medium text-clay-ink2">Product</span> {order.product_name} × {order.quantity} {productUnit({ id: order.product_type, kind: order.product_kind })}{order.quantity === 1 ? '' : 's'}
+                  </div>
+                )}
                 {(order.address || order.barangay) && (
                   <div><span className="font-medium text-clay-ink2">{order.address ? 'Address:' : 'Area:'}</span> {[order.address, order.barangay].filter(Boolean).join(', ')}</div>
                 )}
@@ -293,7 +304,7 @@ export default function Track() {
                   <div><span className="font-medium text-clay-ink2">Pickup:</span> {order.pickup_date} {order.pickup_time}</div>
                 )}
                 {order.delivery_date && (
-                  <div><span className="font-medium text-clay-ink2">Delivery:</span> {order.delivery_date} {order.delivery_time}</div>
+                  <div><span className="font-medium text-clay-ink2">{order.fulfillment === 'pickup' ? 'Store pickup' : 'Delivery'}</span> {order.delivery_date} {order.delivery_time}</div>
                 )}
                 {order.total_amount != null && (
                   <div><span className="font-medium text-clay-ink2">Total:</span> <span className="text-sky-600 font-bold">₱{order.total_amount}</span></div>
@@ -308,7 +319,7 @@ export default function Track() {
                 )}
               </div>
 
-              <StatusStepper status={order.status} />
+              <StatusStepper status={order.status} isPickup={order.fulfillment === 'pickup'} />
 
               {lastUpdated && (
                 <p className="text-xs text-clay-muted text-right mt-4">

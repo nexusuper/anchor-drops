@@ -78,23 +78,25 @@ export default function ProductsTab({ savedPassword }) {
                 </div>
 
                 <div className="flex items-center gap-2 text-sm">
-                  <label className="text-clay-ink/60 w-28 shrink-0">Refill ₱</label>
+                  <label htmlFor={`price-${p.sku}`} className="text-clay-ink/60 w-28 shrink-0">{p.kind && p.kind !== 'refill' ? 'Unit price ₱' : 'Refill ₱'}</label>
                   <input
-                    type="number" min="0" step="1"
+                    id={`price-${p.sku}`}
+                    type="number" min="0" step="0.01"
                     value={d.refill_price}
                     onChange={(e) => setDraft(p.sku, 'refill_price', e.target.value)}
                     className="clay-inset rounded-lg px-2 py-1 w-full"
                   />
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <label className="text-clay-ink/60 w-28 shrink-0">Container+refill ₱</label>
+                {(!p.kind || p.kind === 'refill') && <div className="flex items-center gap-2 text-sm">
+                  <label htmlFor={`combo-price-${p.sku}`} className="text-clay-ink/60 w-28 shrink-0">Container+refill ₱</label>
                   <input
-                    type="number" min="0" step="1"
+                    id={`combo-price-${p.sku}`}
+                    type="number" min="0" step="0.01"
                     value={Number(d.refill_price) + Number(d.container_price)}
                     onChange={(e) => setDraft(p.sku, 'container_price', e.target.value - Number(d.refill_price))}
                     className="clay-inset rounded-lg px-2 py-1 w-full"
                   />
-                </div>
+                </div>}
 
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <button

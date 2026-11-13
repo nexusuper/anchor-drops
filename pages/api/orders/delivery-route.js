@@ -18,6 +18,8 @@ export default async function handler(req, res) {
     const { data: rows, error } = await getSupabase()
       .from('orders')
       .select('*')
+      .is('archived_at', null)
+      .or('fulfillment.is.null,fulfillment.eq.delivery')
       .in('status', ['confirmed', 'out_for_delivery'])
       .or(`delivery_date.eq.${today},delivery_date.is.null`);
     if (error) throw error;
@@ -25,9 +27,10 @@ export default async function handler(req, res) {
     // Orders with no delivery_date matched every day's route forever, silently
     // padding today's list. They still need dispatching, so surface them as
     // their own group instead of hiding or repeating them.
-    const unscheduled = (rows || []).filter((o) => !o.delivery_date);
+    const deliveries = (rows || []).filter((o) => !o.address?.startsWith('Store pickup'));
+    const unscheduled = deliveries.filter((o) => !o.delivery_date);
     const byBarangay = {};
-    for (const o of rows || []) {
+    for (const o of deliveries) {
       if (!o.delivery_date) continue;
       (byBarangay[o.barangay] ||= []).push(o);
     }
@@ -45,7 +48,7 @@ export default async function handler(req, res) {
       barangays.push({ barangay: 'Unscheduled (no delivery date)', count: unscheduled.length, orders: unscheduled });
     }
 
-    return res.status(200).json({ barangays, total: (rows || []).length });
+    return res.status(200).json({ barangays, total: deliveries.length });
   } catch (err) {
     console.error('Route query failed:', err);
     return res.status(500).json({ error: 'Failed to load route' });

@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  images: { unoptimized: true },
   async headers() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl).origin : '';
     return [
       {
         source: '/:path*',
@@ -22,7 +25,7 @@ const nextConfig = {
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: https:",
               // nominatim: address search for the map pin picker
-              "connect-src 'self' https://graph.facebook.com https://nominatim.openstreetmap.org",
+              `connect-src 'self' https://graph.facebook.com https://nominatim.openstreetmap.org ${supabaseOrigin}`,
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",

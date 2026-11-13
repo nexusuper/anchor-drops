@@ -6,7 +6,8 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import LocationPicker from '@/components/order/LocationPicker';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
-import { PRODUCTS, BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY, STORE_ADDRESS_DISPLAY } from '@/lib/products';
+import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY, STORE_ADDRESS_DISPLAY } from '@/lib/products';
+import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
 import {
   classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday, manilaNowTime,
   timeSlots, STORE_HOURS_LABEL,
@@ -74,6 +75,7 @@ const EMPTY_FORM = {
   lat: null,
   lng: null,
   product_type: 'round5_pickup',
+  fulfillment: 'pickup',
   quantity: 1,
   need_container: false,
   container_quantity: 1,
@@ -90,15 +92,8 @@ const EMPTY_FORM = {
 };
 
 export default function Order() {
-  // Admin-controlled kill switch (app_settings.ordering_enabled + products.is_active)
-  // — defaults open until checked, so a slow/failed fetch never blocks a real customer.
-  const [siteStatus, setSiteStatus] = useState(null);
-  useEffect(() => {
-    fetch('/api/ordering-status')
-      .then((r) => r.json())
-      .then(setSiteStatus)
-      .catch(() => setSiteStatus({ enabled: true, activeSkus: null }));
-  }, []);
+  const router = useRouter();
+  const siteStatus = useStorefrontCatalog();
 
   // Hooks below must run every render, so the opening-soon gate lives in a
   // separate component rather than an early return in this one.
@@ -121,16 +116,23 @@ export default function Order() {
     );
   }
 
-  return <OrderForm activeSkus={siteStatus?.activeSkus ?? null} />;
+  const availableProducts = siteStatus?.products?.filter((p) => p.kind !== 'info');
+  if (!router.isReady || !availableProducts?.length) {
+    return (
+      <Layout title="Place an Order — Anchor Drops">
+        <section className="max-w-2xl mx-auto px-4 py-16" role="status">
+          {!siteStatus ? 'Loading current prices…' : 'Online ordering is temporarily unavailable.'}
+        </section>
+      </Layout>
+    );
+  }
+  const queryProduct = availableProducts.find((p) => p.id === router.query.product)?.id;
+  return <OrderForm key={queryProduct} queryProduct={queryProduct} availableProducts={availableProducts} />;
 }
 
-function OrderForm({ activeSkus }) {
+function OrderForm({ queryProduct, availableProducts }) {
   const router = useRouter();
-  const { product: queryProduct } = router.query;
-  // null activeSkus = status check hasn't landed yet (or failed) — show everything.
-  const availableProducts = activeSkus ? PRODUCTS.filter((p) => activeSkus.includes(p.id)) : PRODUCTS;
-
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState({ ...EMPTY_FORM, product_type: queryProduct || EMPTY_FORM.product_type });
   const [restoredIdentity, setRestoredIdentity] = useState(false);
   const hydratedRef = useRef(false);
   // One idempotency key per form session, minted on the first submit and reused
@@ -146,6 +148,8 @@ function OrderForm({ activeSkus }) {
   const [codeError, setCodeError] = useState('');
   const [codeReason, setCodeReason] = useState('');
   const [screenshotError, setScreenshotError] = useState('');
+  const [quoteResult, setQuoteResult] = useState(null);
+  const [quoteAttempt, setQuoteAttempt] = useState(0);
 
   function resetReward() {
     setRewardCount(0);
@@ -153,19 +157,6 @@ function OrderForm({ activeSkus }) {
     setCodeInput('');
     setCodeError('');
   }
-
-  useEffect(() => {
-    if (queryProduct) queueMicrotask(() => setForm((f) => ({ ...f, product_type: queryProduct })));
-  }, [queryProduct]);
-
-  // If the selected product gets deactivated from under the form (admin flips it
-  // off mid-visit), fall back to whatever's still available instead of submitting
-  // a dead sku.
-  useEffect(() => {
-    if (availableProducts.length && !availableProducts.some((p) => p.id === form.product_type)) {
-      queueMicrotask(() => setForm((f) => ({ ...f, product_type: availableProducts[0].id })));
-    }
-  }, [availableProducts]);
 
   // Restore on mount (not in a useState initialiser — the page is server-rendered
   // and reading storage during render would break hydration).
@@ -178,10 +169,20 @@ function OrderForm({ activeSkus }) {
     const identity = readIdentity();
     if (!draft && !identity) return;
     queueMicrotask(() => {
-      setForm((f) => ({ ...f, ...(identity || {}), ...(draft || {}), payment_screenshot: '' }));
+      setForm((f) => ({
+        ...f,
+        ...identity,
+        ...draft,
+        ...(queryProduct && draft?.product_type !== queryProduct && {
+          product_type: queryProduct,
+          fulfillment: 'pickup',
+          pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '',
+        }),
+        payment_screenshot: '',
+      }));
       if (identity?.customer_name) setRestoredIdentity(true);
     });
-  }, []);
+  }, [queryProduct]);
 
   // Persist the in-progress draft. payment_screenshot is a multi-hundred-KB data
   // URL and would blow the sessionStorage quota, so it is deliberately excluded.
@@ -208,10 +209,59 @@ function OrderForm({ activeSkus }) {
   // flow that already exists: lib/reward-codes.js, pages/api/rewards/send-code.js
   // and pages/api/rewards/verify-code.js.
 
+  const selectedProduct = availableProducts.find((p) => p.id === form.product_type) || availableProducts[0];
+  const isRefill = selectedProduct.kind === 'refill';
+  const isBottle = selectedProduct.kind === 'bottle';
+  const unit = productUnit(selectedProduct);
+  const fulfillment = isBottle ? form.fulfillment : selectedProduct.fulfillment;
+  const storePickup = fulfillment === 'pickup';
+  const minQty = storePickup || !isRefill ? 1 : MIN_DELIVERY_QTY;
+  const needContainer = isRefill && form.need_container;
+  const hasEmptyContainers = isRefill && !storePickup && !needContainer && form.has_empty_containers;
+  const quoteKey = JSON.stringify({
+    lines: [{
+      sku: selectedProduct.id,
+      quantity: form.quantity,
+      container_quantity: needContainer ? form.container_quantity : 0,
+    }],
+    fulfillment,
+    lat: storePickup ? null : form.lat,
+    lng: storePickup ? null : form.lng,
+  });
+  const canQuote = form.quantity >= minQty && (!isBottle || storePickup || (form.lat != null && form.lng != null));
+  const currentQuote = quoteResult?.key === quoteKey ? quoteResult : null;
+  const quote = currentQuote?.quote;
+  const voucherValue = Number(quote?.voucher_value ?? VOUCHER_VALUE);
+
+  useEffect(() => {
+    if (!canQuote) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/order-quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: quoteKey,
+          signal: controller.signal,
+        });
+        const data = await res.json();
+        if (controller.signal.aborted) return;
+        if (!res.ok) throw new Error(data.error || 'Could not get a price.');
+        setQuoteResult({ key: quoteKey, quote: data });
+      } catch (err) {
+        if (!controller.signal.aborted) setQuoteResult({ key: quoteKey, error: err.message });
+      }
+    }, 250);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [canQuote, quoteKey, quoteAttempt]);
+
   // Look up loyalty rewards when the phone number looks complete.
   useEffect(() => {
     const digits = normalizePhone(form.phone);
-    if (digits.length < 7) {
+    if (!isRefill || digits.length < 7) {
       queueMicrotask(() => {
         setRewards(null);
         resetReward();
@@ -228,27 +278,24 @@ function OrderForm({ activeSkus }) {
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [form.phone]);
+  }, [form.phone, isRefill]);
 
-  const selectedProduct = availableProducts.find((p) => p.id === form.product_type) || availableProducts[0] || PRODUCTS[0];
-  // Store pickup drops the whole delivery half of the form: no address, no
-  // barangay, no map pin, no container-pickup run — the one date/time the
-  // customer picks is when they come to the store.
-  const storePickup = selectedProduct.fulfillment === 'pickup';
-  const minQty = storePickup ? 1 : MIN_DELIVERY_QTY;
-  const refillTotal = selectedProduct.refill * form.quantity;
-  const containerTotal = form.need_container ? selectedProduct.container * form.container_quantity : 0;
-  const baseTotal = refillTotal + containerTotal;
+  const quotedProduct = quote?.lines[0];
+  const refillTotal = Number(((quotedProduct?.refill_price ?? selectedProduct.refill) * form.quantity).toFixed(2));
+  const containerTotal = needContainer
+    ? Number(((quotedProduct?.container_price ?? selectedProduct.container) * form.container_quantity).toFixed(2))
+    : 0;
+  const baseTotal = quote ? Number((Number(quote.subtotal) + Number(quote.delivery_fee)).toFixed(2)) : null;
   const maxVouchers = maxRedeemable({
-    available: rewards ? rewards.available : 0,
+    available: isRefill && rewards ? rewards.available : 0,
     quantity: form.quantity,
     refillSubtotal: refillTotal,
   });
-  const codeApplied = codePhase === 'verified';
+  const codeApplied = isRefill && codePhase === 'verified';
   // A voucher buys a refill, it never pays out the difference: on a ₱25 pickup
   // refill the discount is ₱25, not the ₱30 face value.
-  const voucherDiscount = codeApplied ? Math.min(rewardCount * VOUCHER_VALUE, refillTotal) : 0;
-  const grandTotal = Math.max(0, baseTotal - voucherDiscount);
+  const voucherDiscount = codeApplied ? Math.min(rewardCount * voucherValue, refillTotal) : 0;
+  const grandTotal = baseTotal == null ? null : Number(Math.max(0, baseTotal - voucherDiscount).toFixed(2));
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -264,12 +311,12 @@ function OrderForm({ activeSkus }) {
   const today = manilaToday();
   const nowTime = manilaNowTime();
   const pickupSlot = classifyPickupTime(form.pickup_time);
-  const showAfternoonNotice = !storePickup && form.has_empty_containers && pickupSlot === 'afternoon';
-  const allowedDelivery = !storePickup && form.has_empty_containers
+  const showAfternoonNotice = hasEmptyContainers && pickupSlot === 'afternoon';
+  const allowedDelivery = hasEmptyContainers
     ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time })
     : null;
   const scheduleCheck = validateSchedule({
-    hasEmptyContainers: !storePickup && form.has_empty_containers,
+    hasEmptyContainers,
     pickupDate: form.pickup_date || null,
     pickupTime: form.pickup_time || null,
     deliveryDate: form.delivery_date,
@@ -278,19 +325,17 @@ function OrderForm({ activeSkus }) {
     nowTime,
   });
 
-  // Switching between a store-pickup and a delivery product invalidates the
-  // schedule the customer already picked (different windows, different meaning).
-  // Skips the first run so a restored draft keeps the schedule it was saved with.
-  const prevStorePickup = useRef(storePickup);
-  useEffect(() => {
-    if (prevStorePickup.current === storePickup) return;
-    prevStorePickup.current = storePickup;
+  function selectFulfillment(product, mode) {
+    setError('');
     setForm((f) => ({
       ...f,
-      has_empty_containers: storePickup ? false : f.has_empty_containers,
+      product_type: product.id,
+      fulfillment: mode,
+      need_container: false,
+      has_empty_containers: product.kind === 'refill' && mode === 'delivery',
       pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '',
     }));
-  }, [storePickup]);
+  }
 
   // Delivery has a minimum refill count (lib/order-guard.js); lift the count to
   // it on load and when switching from a store-pickup product.
@@ -301,11 +346,12 @@ function OrderForm({ activeSkus }) {
   // Default the delivery date to the earliest allowed day whenever the pickup
   // slot changes. Morning pickup locks to that same day; afternoon pickup only
   // suggests the next open day — the customer can still pick a later one.
+  const earliestDeliveryDate = allowedDelivery?.minDate;
   useEffect(() => {
-    if (form.has_empty_containers && allowedDelivery) {
-      queueMicrotask(() => setForm((f) => ({ ...f, delivery_date: allowedDelivery.minDate })));
+    if (earliestDeliveryDate) {
+      queueMicrotask(() => setForm((f) => ({ ...f, delivery_date: earliestDeliveryDate })));
     }
-  }, [form.has_empty_containers, allowedDelivery?.minDate]);
+  }, [earliestDeliveryDate]);
 
   // Keep the chosen count within bounds; any bound change cancels a prior verification.
   useEffect(() => {
@@ -382,6 +428,10 @@ function OrderForm({ activeSkus }) {
       setError(scheduleCheck.error);
       return;
     }
+    if (!quote) {
+      setError(currentQuote?.error || 'Get a current price before placing your order.');
+      return;
+    }
     setLoading(true);
     try {
       // Inside the try on purpose: this used to sit above it, and on a browser
@@ -393,6 +443,8 @@ function OrderForm({ activeSkus }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          product_type: selectedProduct.id,
+          fulfillment,
           // The server stamps the store's address for a pickup; sending a
           // half-filled one would only be stored and never used.
           address: storePickup ? null : form.address,
@@ -402,16 +454,21 @@ function OrderForm({ activeSkus }) {
           client_order_id: clientOrderIdRef.current,
           container_size: selectedProduct.size,
           total_amount: baseTotal,
-          reward_requested: rewardCount,
+          delivery_fee: Number(quote.delivery_fee),
+          need_container: needContainer,
+          container_quantity: needContainer ? form.container_quantity : 0,
+          reward_requested: isRefill ? rewardCount : 0,
           reward_code: codeApplied ? codeInput : null,
-          has_empty_containers: !storePickup && form.has_empty_containers,
-          pickupDate: !storePickup && form.has_empty_containers ? form.pickup_date : null,
-          pickupTime: !storePickup && form.has_empty_containers ? form.pickup_time : null,
+          has_empty_containers: hasEmptyContainers,
+          pickupDate: hasEmptyContainers ? form.pickup_date : null,
+          pickupTime: hasEmptyContainers ? form.pickup_time : null,
           deliveryDate: form.delivery_date,
           deliveryTime: form.delivery_time,
         }),
       });
       const data = await res.json();
+      if (res.status === 409 && data.quote) setQuoteResult({ key: quoteKey, quote: data.quote, changed: true });
+      if (res.status === 400 && data.quoteUnavailable) setQuoteResult({ key: quoteKey, error: data.error });
       if (!res.ok) throw new Error(data.error || 'Failed to place order');
       writeIdentity(Object.fromEntries(IDENTITY_FIELDS.map((k) => [k, form[k]])));
       try { window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* nicety */ }
@@ -467,7 +524,7 @@ function OrderForm({ activeSkus }) {
                 <div className="clay-inset rounded-xl p-4 text-sm text-clay-ink2" role="status">
                   <p className="font-semibold mb-1">You&apos;re picking this up at the store.</p>
                   <p className="text-clay-muted font-semibold">{STORE_ADDRESS_DISPLAY}</p>
-                  <p className="text-clay-muted mt-1">No address needed. Want it delivered instead? Pick a Delivery product below.</p>
+                  <p className="text-clay-muted mt-1">No delivery address needed.</p>
                 </div>
               ) : (
               <>
@@ -487,8 +544,12 @@ function OrderForm({ activeSkus }) {
                 {barangayInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">We deliver within Cagayan de Oro only. Pick your barangay from the list.</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-1">Pin your location on the map (optional)</label>
-                <p className="text-xs text-clay-muted mb-2">Helps our driver find you — doesn&apos;t replace the address above.</p>
+                <p className="block text-sm font-medium text-clay-ink2 mb-1">
+                  {isBottle ? 'Pin your delivery location (required)' : 'Pin your location on the map (optional)'}
+                </p>
+                <p className="text-xs text-clay-muted mb-2">
+                  {isBottle ? 'Your pin determines availability and the delivery fee.' : 'Helps our driver find your delivery address.'}
+                </p>
                 <LocationPicker
                   value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
                   onChange={(pt) => setForm((f) => ({ ...f, lat: pt?.lat ?? null, lng: pt?.lng ?? null }))}
@@ -500,7 +561,7 @@ function OrderForm({ activeSkus }) {
           </ClayCard>
 
           {/* Loyalty reward */}
-          {rewards && rewards.available > 0 && (
+          {isRefill && rewards && rewards.available > 0 && (
             <ClayCard variant="inset" className="p-5">
               <div className="flex items-center gap-3 mb-3">
                 <span className="grid place-items-center w-11 h-11 rounded-2xl text-white clay-raised-sm" style={{ background: 'linear-gradient(145deg,#38bdf8,#0284c7)' }}>
@@ -508,7 +569,7 @@ function OrderForm({ activeSkus }) {
                 </span>
                 <div>
                   <p className="font-editorial font-bold text-clay-ink">You have {rewards.available} free refill{rewards.available > 1 ? 's' : ''}!</p>
-                  <p className="text-xs text-clay-muted font-semibold">Each free gallon refill saves you ₱{VOUCHER_VALUE}.</p>
+                  <p className="text-xs text-clay-muted font-semibold">Each free gallon refill saves you up to ₱{voucherValue}.</p>
                 </div>
               </div>
 
@@ -556,7 +617,7 @@ function OrderForm({ activeSkus }) {
                       )}
                       {codePhase === 'verified' && (
                         <p className="text-sm font-semibold text-clay-skydeep flex items-center gap-1">
-                          <ClayIcon name="check" className="w-4 h-4" /> Code verified — ₱{rewardCount * VOUCHER_VALUE} off applied.
+                          <ClayIcon name="check" className="w-4 h-4" /> Code verified. ₱{voucherDiscount} off applied.
                         </p>
                       )}
                       {codePhase === 'fallback' && (
@@ -575,7 +636,7 @@ function OrderForm({ activeSkus }) {
                   )}
                 </div>
               ) : (
-                <p className="text-xs text-clay-muted font-semibold">Add at least ₱{VOUCHER_VALUE} of refills to use a free refill on this order.</p>
+                <p className="text-xs text-clay-muted font-semibold">Add a refill to use a voucher on this order.</p>
               )}
             </ClayCard>
           )}
@@ -588,33 +649,47 @@ function OrderForm({ activeSkus }) {
                 <label className="block text-sm font-medium text-clay-ink2 mb-2">Product *</label>
                 <div className="grid grid-cols-1 gap-2">
                   {availableProducts.map((p) => (
-                    <label key={p.id} className={`flex items-center justify-between rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.product_type === p.id ? 'clay-tile-selected' : ''}`}>
+                    <label key={p.id} className={`flex items-center justify-between rounded-2xl px-4 py-3 cursor-pointer clay-tile ${selectedProduct.id === p.id ? 'clay-tile-selected' : ''}`}>
                       <div className="flex items-center gap-3">
-                        <input type="radio" name="product_type" value={p.id} checked={form.product_type === p.id} onChange={() => set('product_type', p.id)} className="accent-clay-sky" />
+                        <input type="radio" name="product_type" value={p.id} checked={selectedProduct.id === p.id} onChange={() => selectFulfillment(p, p.kind === 'bottle' ? 'pickup' : p.fulfillment)} className="accent-clay-sky" />
                         <span className="font-semibold text-clay-ink">{p.name}</span>
                       </div>
-                      <span className="font-editorial text-clay-skydeep font-bold">₱{p.refill}/refill</span>
+                      <span className="font-editorial text-clay-skydeep font-bold">₱{selectedProduct.id === p.id ? quotedProduct?.refill_price ?? p.refill : p.refill}/{productUnit(p)}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label htmlFor="quantity" className="block text-sm font-medium text-clay-ink2 mb-1">Quantity (refills) *</label>
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => set('quantity', Math.max(minQty, form.quantity - 1))} disabled={form.quantity <= minQty} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label="Fewer refills">−</button>
-                  <input id="quantity" type="number" min={minQty} max="50" required value={form.quantity} onChange={(e) => set('quantity', Math.min(50, Math.max(minQty, parseInt(e.target.value) || minQty)))} className="clay-input text-center" />
-                  <button type="button" onClick={() => set('quantity', Math.min(50, form.quantity + 1))} disabled={form.quantity >= 50} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label="More refills">+</button>
-                </div>
-                {!storePickup && <p className="text-xs text-clay-muted font-semibold mt-1">{DELIVERY_MIN_MESSAGE}</p>}
-              </div>
+              {isBottle && (
+                <fieldset>
+                  <legend className="block text-sm font-medium text-clay-ink2 mb-2">How would you like to get your water?</legend>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[['pickup', 'Store pickup'], ['delivery', 'Delivery']].map(([mode, label]) => (
+                      <label key={mode} className="flex items-center gap-2 rounded-2xl px-4 py-3 cursor-pointer clay-tile">
+                        <input type="radio" name="fulfillment" value={mode} checked={fulfillment === mode} onChange={() => selectFulfillment(selectedProduct, mode)} className="accent-clay-sky" />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
 
               <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-2">Need a new gallon?</label>
+                <label htmlFor="quantity" className="block text-sm font-medium text-clay-ink2 mb-1">Quantity ({unit}s) *</label>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => set('quantity', Math.max(minQty, form.quantity - 1))} disabled={form.quantity <= minQty} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label={`Fewer ${unit}s`}>−</button>
+                  <input id="quantity" type="number" min={minQty} max="50" required value={form.quantity} onChange={(e) => set('quantity', Math.min(50, Math.max(minQty, parseInt(e.target.value) || minQty)))} className="clay-input text-center" />
+                  <button type="button" onClick={() => set('quantity', Math.min(50, form.quantity + 1))} disabled={form.quantity >= 50} className="w-11 h-11 shrink-0 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable disabled:opacity-40" aria-label={`More ${unit}s`}>+</button>
+                </div>
+                {isRefill && !storePickup && <p className="text-xs text-clay-muted font-semibold mt-1">{DELIVERY_MIN_MESSAGE}</p>}
+              </div>
+
+              {isRefill && <div>
+                <label className="block text-sm font-medium text-clay-ink2 mb-2">Need a new round container?</label>
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { id: false, label: 'No' },
-                    { id: true, label: `Yes (+₱${selectedProduct.container} each)` },
+                    { id: true, label: `Yes (+₱${quotedProduct?.container_price ?? selectedProduct.container} each)` },
                   ].map((opt) => (
                     <label key={String(opt.id)} className={`flex items-center justify-center rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.need_container === opt.id ? 'clay-tile-selected' : ''}`}>
                       <input
@@ -628,9 +703,9 @@ function OrderForm({ activeSkus }) {
                     </label>
                   ))}
                 </div>
-              </div>
+              </div>}
 
-              {form.need_container && (
+              {needContainer && (
                 <div>
                   <label htmlFor="container_quantity" className="block text-sm font-medium text-clay-ink2 mb-1">Number of containers *</label>
                   <input id="container_quantity" type="number" min="1" max="10" value={form.container_quantity} onChange={(e) => set('container_quantity', parseInt(e.target.value) || 1)} className="clay-input" />
@@ -654,9 +729,10 @@ function OrderForm({ activeSkus }) {
               ))}
             </div>
 
-            {form.payment_method === 'gcash' && (
+            {form.payment_method === 'gcash' && quote && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
                 <p className="text-sm text-clay-ink2">GCash: <strong>{GCASH_NUMBER_DISPLAY}</strong> (Anchor Drops)</p>
+                <p className="text-sm text-clay-ink2">Amount to send <strong>₱{grandTotal}</strong></p>
                 <div className="flex flex-col items-center gap-2 py-2">
                   <img src="/payment/gcash-qr.jpeg" alt="Anchor Drops GCash / InstaPay QR code" className="w-48 h-auto rounded-2xl clay-raised-sm" />
                   <p className="text-xs text-clay-muted font-semibold">Scan with GCash, or your bank app via InstaPay/QR Ph</p>
@@ -713,7 +789,7 @@ function OrderForm({ activeSkus }) {
           {/* Scheduling */}
           <ClayCard className="p-6">
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">
-              {storePickup ? 'When are you coming to the store?' : 'Container Pickup & Delivery'}
+              {storePickup ? 'When are you coming to the store?' : isRefill ? 'Container Pickup & Delivery' : 'Delivery Schedule'}
             </h2>
             <div className="space-y-4">
               {storePickup ? (
@@ -730,7 +806,7 @@ function OrderForm({ activeSkus }) {
                 </>
               ) : (
               <>
-              <div>
+              {isRefill && <div>
                 <label className="block text-sm font-medium text-clay-ink2 mb-2">Do you have empty containers at home for us to pick up? *</label>
                 <div className="grid grid-cols-2 gap-3">
                   {[
@@ -749,9 +825,9 @@ function OrderForm({ activeSkus }) {
                     </label>
                   ))}
                 </div>
-              </div>
+              </div>}
 
-              {form.has_empty_containers ? (
+              {hasEmptyContainers ? (
                 <>
                   <div>
                     <label htmlFor="pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
@@ -842,10 +918,16 @@ function OrderForm({ activeSkus }) {
                 <span className="text-clay-muted">{selectedProduct.name} x{form.quantity}</span>
                 <span className="font-medium">₱{refillTotal}</span>
               </div>
-              {form.need_container && form.container_quantity > 0 && (
+              {needContainer && form.container_quantity > 0 && (
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Container x{form.container_quantity}</span>
                   <span className="font-medium">₱{containerTotal}</span>
+                </div>
+              )}
+              {!storePickup && quote && (
+                <div className="flex justify-between">
+                  <span className="text-clay-muted">Delivery fee</span>
+                  <span className="font-medium">{Number(quote.delivery_fee) ? `₱${quote.delivery_fee}` : 'Free'}</span>
                 </div>
               )}
               {voucherDiscount > 0 && (
@@ -854,7 +936,7 @@ function OrderForm({ activeSkus }) {
                   <span>−₱{voucherDiscount}</span>
                 </div>
               )}
-              {!codeApplied && codePhase === 'fallback' && rewardCount > 0 && (
+              {isRefill && !codeApplied && codePhase === 'fallback' && rewardCount > 0 && (
                 <div className="flex justify-between text-clay-muted">
                   <span>Free refill requested ×{rewardCount}</span>
                   <span>on delivery</span>
@@ -862,8 +944,22 @@ function OrderForm({ activeSkus }) {
               )}
               <div className="border-t border-sky-200 pt-2 mt-2 flex justify-between font-bold text-base">
                 <span className="text-clay-ink">Total</span>
-                <span className="text-clay-skydeep">₱{grandTotal}</span>
+                <span className="text-clay-skydeep">{grandTotal == null ? '—' : `₱${grandTotal}`}</span>
               </div>
+              {!canQuote && isBottle && !storePickup && <p role="status">Add a delivery pin to see the total.</p>}
+              {canQuote && !currentQuote && <p role="status">Checking current prices…</p>}
+              {currentQuote?.error && (
+                <>
+                  <p role="alert" className="text-clay-danger">{currentQuote.error}</p>
+                  <button type="button" className="text-clay-skydeep underline" onClick={() => {
+                    setQuoteResult(null);
+                    setQuoteAttempt((attempt) => attempt + 1);
+                  }}>Check price again</button>
+                </>
+              )}
+              {currentQuote?.error && isBottle && !storePickup && (
+                <button type="button" className="text-clay-skydeep underline" onClick={() => selectFulfillment(selectedProduct, 'pickup')}>Switch to store pickup</button>
+              )}
             </div>
           </ClayCard>
 
@@ -871,16 +967,16 @@ function OrderForm({ activeSkus }) {
             <div className="bg-clay-danger-bg border border-red-200 text-clay-danger rounded-xl px-4 py-3 text-sm" role="alert">{error}</div>
           )}
 
-          <p className="text-center text-sm font-semibold text-clay-skydeep">💧 Free refill after 10 refills — earned automatically on every order.</p>
+          {isRefill && <p className="text-center text-sm font-semibold text-clay-skydeep">💧 Free refill after 10 refills.</p>}
 
-          <button type="submit" disabled={loading} aria-busy={loading || undefined} className="w-full inline-flex items-center justify-center gap-2 clay-btn-primary clay-pressable rounded-full py-4 text-lg font-editorial font-semibold disabled:opacity-60">
+          <button type="submit" disabled={loading || !quote} aria-busy={loading || undefined} className="w-full inline-flex items-center justify-center gap-2 clay-btn-primary clay-pressable rounded-full py-4 text-lg font-editorial font-semibold disabled:opacity-60">
             {loading ? (
               <>
                 <span className="clay-spinner" aria-hidden="true" />
                 Placing Order…
               </>
             ) : (
-              'Place Order →'
+              currentQuote?.changed ? 'Confirm New Total →' : 'Place Order →'
             )}
           </button>
         </form>

@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   try {
     const { data: rows, error } = await getSupabase()
       .from('orders')
-      .select('status, created_at, product_type, container_size, quantity, customer_name, voucher_count, voucher_discount, reward_requested, pickup_date, barangay')
+      .select('status, created_at, product_type, container_size, quantity, customer_name, voucher_count, voucher_discount, reward_requested, pickup_date, barangay, fulfillment')
       .eq('phone_normalized', phone)
       .gte('created_at', sixtyDaysAgo)
       .order('created_at', { ascending: false })
@@ -45,6 +45,7 @@ export default async function handler(req, res) {
 
     const order = rows?.[0];
     if (!order) return res.status(404).json({ error: 'No recent order found for that number. Try your Order ID instead.' });
+    const { data: product } = await getSupabase().from('products').select('name,kind').eq('sku', order.product_type).maybeSingle();
 
     // Unverified lookup: no schedule and no money. Knowing when someone's
     // delivery lands is knowing when they're home, so those fields are withheld
@@ -52,6 +53,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: order.status, created_at: order.created_at,
       product_type: order.product_type, container_size: order.container_size,
+      product_name: product?.name ?? order.product_type,
+      product_kind: product?.kind,
+      fulfillment: order.fulfillment,
       quantity: order.quantity,
       customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,
       barangay: order.barangay,
