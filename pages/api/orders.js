@@ -44,6 +44,7 @@ const OrderSchema = z.object({
     .nullable(),
   notes: z.string().max(1000).optional().nullable(),
   total_amount: z.number().finite().min(0),
+  expected_final_total: z.number().finite().min(0),
   delivery_fee: z.number().finite().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
   reward_code: z.string().max(10).optional().nullable(),
@@ -157,7 +158,7 @@ export default async function handler(req, res) {
     }
     const {
       customer_name, phone, address, barangay,
-      product_type, quantity, fulfillment, total_amount, delivery_fee,
+      product_type, quantity, fulfillment, total_amount, expected_final_total, delivery_fee,
       need_container, container_quantity,
       payment_method, gcash_number, reference_number, payment_screenshot,
       notes, reward_requested, reward_code,
@@ -395,7 +396,7 @@ export default async function handler(req, res) {
       }
     }
 
-    const { data: order, error: rpcErr } = await supabase.rpc('create_order', {
+    const orderArgs = {
       p_client_order_id: id,
       p_branch_id: DEFAULT_BRANCH_ID,
       p_customer_name: customer_name,
@@ -425,6 +426,10 @@ export default async function handler(req, res) {
       p_pickup_time: hasEmptyContainers ? pickupTime : null,
       p_lat: storePickup ? null : (lat ?? null),
       p_lng: storePickup ? null : (lng ?? null),
+    };
+    const { data: order, error: rpcErr } = await supabase.rpc('create_priced_catalog_order', {
+      p_order: orderArgs,
+      p_expected_final_total: expected_final_total,
     });
 
     if (rpcErr) {
@@ -435,10 +440,28 @@ export default async function handler(req, res) {
         if (screenshotPath) await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
         if (rpcErr.code === '23505') return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
         if (rpcErr.code === '22023') return res.status(400).json({ error: rpcErr.message });
+        let revisedReward = null;
+        if (rpcErr.details) {
+          try {
+            const detail = JSON.parse(rpcErr.details);
+            if ([detail?.total_amount, detail?.voucher_count, detail?.voucher_discount].every(Number.isFinite)) {
+              revisedReward = detail;
+            }
+          } catch { /* A catalog price conflict can omit reward details. */ }
+        }
         const { data: updated, error: updatedError } = await supabase.rpc('quote_catalog_order', quoteArgs);
         if (updatedError?.code === '22023') return res.status(400).json({ error: updatedError.message, quoteUnavailable: true });
         if (updatedError) throw updatedError;
-        return res.status(409).json({ error: 'The price changed. Review the new total before placing your order.', quote: updated });
+        if (!revisedReward && rpcErr.message === 'The rewards balance changed. Review the updated quote.') {
+          revisedReward = { voucher_discount: 0, voucher_count: 0, requires_manual_approval: true };
+        }
+        return res.status(409).json({
+          error: revisedReward
+            ? 'The reward discount changed. Review the new total before placing your order.'
+            : 'The price changed. Review the new total before placing your order.',
+          quote: updated,
+          revised_reward: revisedReward,
+        });
       }
       console.error('Order insert failed:', rpcErr);
       return res.status(500).json({ error: 'Failed to place order' });

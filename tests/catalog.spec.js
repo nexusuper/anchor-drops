@@ -23,6 +23,15 @@ const pack = {
   size: '1 L × 12',
   refill: 180,
 };
+const refill = {
+  ...bottle,
+  id: 'round5_pickup',
+  name: 'Round Refill (Store Pickup)',
+  size: '5-Gal',
+  refill: 25,
+  kind: 'refill',
+  fulfillment: 'pickup',
+};
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/ordering-status', (route) => route.fulfill({
@@ -108,4 +117,58 @@ test('pickup confirmation shows packs and pickup schedule', async ({ page }) => 
   await expect(page.getByText('2 packs', { exact: true })).toBeVisible();
   await expect(page.getByText('Cash at the store')).toBeVisible();
   await expect(page.getByText('Scheduled store pickup', { exact: true })).toBeVisible();
+});
+
+test('checkout requires confirmation when the verified refill discount changes', async ({ page }) => {
+  const quote = {
+    lines: [{ sku: refill.id, refill_price: 25, container_price: 0 }],
+    subtotal: 25, delivery_fee: 0, voucher_value: 30,
+  };
+  await page.route('**/api/ordering-status', (route) => route.fulfill({
+    json: { enabled: true, products: [refill] },
+  }));
+  await page.route('**/api/order-quote', (route) => route.fulfill({ json: quote }));
+  await page.route('**/api/rewards?phone=*', (route) => route.fulfill({ json: { available: 1 } }));
+  await page.route('**/api/rewards/send-code', (route) => route.fulfill({ json: { sent: true } }));
+  await page.route('**/api/rewards/verify-code', (route) => route.fulfill({ json: { valid: true, available: 1 } }));
+  await page.route('**/api/orders/*', (route) => route.fulfill({
+    json: { status: 'pending', quantity: 1, product_type: refill.id, product_name: refill.name, product_kind: 'refill' },
+  }));
+  const totals = [];
+  await page.route('**/api/orders', (route) => {
+    const order = route.request().postDataJSON();
+    totals.push(order.expected_final_total);
+    if (totals.length === 1) {
+      expect(order.reward_code).toBe('123456');
+      return route.fulfill({ status: 409, json: {
+        error: 'The reward discount changed.',
+        quote,
+        revised_reward: { voucher_discount: 0, voucher_count: 0, requires_manual_approval: true },
+      } });
+    }
+    expect(order.reward_code).toBeNull();
+    expect(order.reward_requested).toBe(1);
+    return route.fulfill({ status: 201, json: { id: order.client_order_id } });
+  });
+
+  await page.goto('/order?product=round5_pickup');
+  await page.getByLabel(/full name/i).fill('Sample Customer');
+  await page.getByLabel(/phone number/i).fill('09171234567');
+  await page.getByRole('button', { name: 'Use more' }).click();
+  await page.getByRole('button', { name: 'Verify with a Messenger code' }).click();
+  await page.getByPlaceholder('123456').fill('123456');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByText('Code verified. ₱25 off applied.')).toBeVisible();
+  const tomorrow = new Date(Date.now() + 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  await page.getByLabel('Store pickup date').fill(tomorrow);
+  await page.getByLabel('Store pickup time').selectOption({ index: 1 });
+  await page.getByRole('button', { name: 'Place Order →' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'The reward discount changed.' })).toBeVisible();
+  expect(totals).toEqual([0]);
+  const summary = page.getByRole('heading', { name: 'Order Summary' }).locator('..');
+  await expect(summary).toContainText('Total₱25');
+  await expect(summary.getByText('−₱25')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Confirm New Total →' }).click();
+  await expect(page).toHaveURL(/\/order\/confirmation/);
+  expect(totals).toEqual([0, 25]);
 });

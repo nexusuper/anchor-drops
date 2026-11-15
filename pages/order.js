@@ -292,9 +292,12 @@ function OrderForm({ queryProduct, availableProducts }) {
     refillSubtotal: refillTotal,
   });
   const codeApplied = isRefill && codePhase === 'verified';
+  const rewardSelection = JSON.stringify([form.phone, rewardCount, codeApplied ? codeInput : null]);
+  const revisedReward = currentQuote?.rewardSelection === rewardSelection ? currentQuote.revisedReward : null;
   // A voucher buys a refill, it never pays out the difference: on a ₱25 pickup
   // refill the discount is ₱25, not the ₱30 face value.
-  const voucherDiscount = codeApplied ? Math.min(rewardCount * voucherValue, refillTotal) : 0;
+  const appliedRewards = revisedReward?.voucher_count ?? (codeApplied ? rewardCount : 0);
+  const voucherDiscount = revisedReward?.voucher_discount ?? Math.min(appliedRewards * voucherValue, refillTotal);
   const grandTotal = baseTotal == null ? null : Number(Math.max(0, baseTotal - voucherDiscount).toFixed(2));
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -454,11 +457,12 @@ function OrderForm({ queryProduct, availableProducts }) {
           client_order_id: clientOrderIdRef.current,
           container_size: selectedProduct.size,
           total_amount: baseTotal,
+          expected_final_total: grandTotal,
           delivery_fee: Number(quote.delivery_fee),
           need_container: needContainer,
           container_quantity: needContainer ? form.container_quantity : 0,
           reward_requested: isRefill ? rewardCount : 0,
-          reward_code: codeApplied ? codeInput : null,
+          reward_code: codeApplied && !revisedReward?.requires_manual_approval ? codeInput : null,
           has_empty_containers: hasEmptyContainers,
           pickupDate: hasEmptyContainers ? form.pickup_date : null,
           pickupTime: hasEmptyContainers ? form.pickup_time : null,
@@ -467,7 +471,13 @@ function OrderForm({ queryProduct, availableProducts }) {
         }),
       });
       const data = await res.json();
-      if (res.status === 409 && data.quote) setQuoteResult({ key: quoteKey, quote: data.quote, changed: true });
+      if (res.status === 409 && data.quote) setQuoteResult({
+        key: quoteKey,
+        quote: data.quote,
+        changed: true,
+        rewardSelection,
+        revisedReward: data.revised_reward,
+      });
       if (res.status === 400 && data.quoteUnavailable) setQuoteResult({ key: quoteKey, error: data.error });
       if (!res.ok) throw new Error(data.error || 'Failed to place order');
       writeIdentity(Object.fromEntries(IDENTITY_FIELDS.map((k) => [k, form[k]])));
@@ -617,7 +627,10 @@ function OrderForm({ queryProduct, availableProducts }) {
                       )}
                       {codePhase === 'verified' && (
                         <p className="text-sm font-semibold text-clay-skydeep flex items-center gap-1">
-                          <ClayIcon name="check" className="w-4 h-4" /> Code verified. ₱{voucherDiscount} off applied.
+                          <ClayIcon name="check" className="w-4 h-4" />
+                          {appliedRewards > 0
+                            ? `Code verified. ₱${voucherDiscount} off applied.`
+                            : 'No instant discount is available. We’ll review your refill request when we confirm the order.'}
                         </p>
                       )}
                       {codePhase === 'fallback' && (
@@ -932,11 +945,11 @@ function OrderForm({ queryProduct, availableProducts }) {
               )}
               {voucherDiscount > 0 && (
                 <div className="flex justify-between text-clay-skydeep font-semibold">
-                  <span>Free refill reward ×{rewardCount}</span>
+                  <span>Free refill reward ×{appliedRewards}</span>
                   <span>−₱{voucherDiscount}</span>
                 </div>
               )}
-              {isRefill && !codeApplied && codePhase === 'fallback' && rewardCount > 0 && (
+              {isRefill && (codePhase === 'fallback' || revisedReward?.requires_manual_approval) && rewardCount > 0 && (
                 <div className="flex justify-between text-clay-muted">
                   <span>Free refill requested ×{rewardCount}</span>
                   <span>on delivery</span>

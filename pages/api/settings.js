@@ -14,7 +14,8 @@ const PatchSchema = z.object({
 
 export default async function handler(req, res) {
   if (!(await adminRate(req, res))) return;
-  if (!await verifyAdminWithLockout(req, res)) return;
+  const permissions = req.method === 'PATCH' ? { names: ['owner', 'admin'] } : undefined;
+  if (!await verifyAdminWithLockout(req, res, permissions)) return;
 
   const supabase = getSupabase();
 

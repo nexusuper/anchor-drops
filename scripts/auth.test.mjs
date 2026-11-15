@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { verifyAdmin, timingSafeEqual } from '../lib/auth.js';
+import { verifyAdmin, verifyAdminWithLockout, timingSafeEqual } from '../lib/auth.js';
 
 const req = (password) => ({ headers: password === undefined ? {} : { password } });
 
@@ -52,5 +52,19 @@ withEnv({ ADMIN_USERS: 'nocolon,:leadingcolon,locked:x,ok:good' }, () => {
 assert.equal(timingSafeEqual('a', 'a'), true);
 assert.equal(timingSafeEqual('a', 'bb'), false);
 assert.equal(timingSafeEqual(null, 'a'), false);
+
+const catalogPermissions = { names: ['owner', 'admin'] };
+for (const [env, password, expected] of [
+  [{ ADMIN_USERS: 'owner:owner-pass,rider1:rider-pass' }, 'owner-pass', 'owner'],
+  [{ ADMIN_USERS: 'owner:owner-pass,rider1:rider-pass' }, 'rider-pass', false],
+  [{ ADMIN_PASSWORD: 'legacy-admin-pass' }, 'legacy-admin-pass', 'admin'],
+]) {
+  // This verifier checks synchronously before returning its result promise.
+  const res = { status(code) { this.code = code; return this; }, json() {} };
+  let result;
+  withEnv(env, () => { result = verifyAdminWithLockout(req(password), res, catalogPermissions); });
+  assert.equal(await result, expected);
+  assert.equal(res.code, expected ? undefined : 403);
+}
 
 console.log('auth.test.mjs: all assertions passed');
