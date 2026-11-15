@@ -448,6 +448,9 @@ export default async function handler(req, res) {
       if (screenshotPath) await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
       return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
     }
+    if (claimedRewardCodeId && Number(order.voucher_count) < voucher_count) {
+      await supabase.from('reward_codes').update({ used: false }).eq('id', claimedRewardCodeId);
+    }
     if (screenshotPath && screenshotPath !== order.payment_screenshot_path) {
       await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
       screenshotSaved = !!order.payment_screenshot_path;

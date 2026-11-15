@@ -51,7 +51,8 @@ export function stopAddress(o) {
 
 /** Single-stop directions link (origin = the driver's current location). */
 export function navigateUrl(o) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stopAddress(o))}&travelmode=driving`;
+  const destination = o.lat != null && o.lng != null ? `${o.lat},${o.lng}` : stopAddress(o);
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
 }
 
 // ponytail: stops stay in barangay/time order — free Google Maps URLs don't
@@ -86,8 +87,8 @@ const ON_ROUTE_STATUSES = ['confirmed', 'out_for_delivery'];
 function flatten(o, balances) {
   return {
     ...o,
-    lat: o.customer_addresses?.lat ?? null,
-    lng: o.customer_addresses?.lng ?? null,
+    lat: o.delivery_lat ?? o.customer_addresses?.lat ?? null,
+    lng: o.delivery_lng ?? o.customer_addresses?.lng ?? null,
     productName: o.products?.name ?? null,
     // A customer with no ledger rows genuinely holds nothing -> 0. Only an
     // unavailable lookup stays null, which the stop screen renders as
