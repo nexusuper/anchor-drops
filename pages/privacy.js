@@ -64,7 +64,8 @@ export default function Privacy() {
             <li>With our own delivery staff, so they can fulfill and deliver your order.</li>
             <li>With service providers that run our system on our behalf: <strong>Supabase</strong> (secure
               database and file storage), <strong>Meta / Facebook</strong> (Messenger messages and the Pixel),
-              and our SMS provider if SMS updates are enabled.</li>
+              <strong>Anthropic</strong> (our Messenger assistant reads free-refill questions you send us, with
+              phone numbers and codes removed first), and our SMS provider if SMS updates are enabled.</li>
             <li>When required by law.</li>
           </ul>
         </Section>

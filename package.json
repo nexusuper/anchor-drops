@@ -14,6 +14,7 @@
     "render:poster": "remotion still remotion/index.ts Poster public/purify-process-poster.jpg --image-format=jpeg"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@supabase/supabase-js": "^2.110.2",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.4",

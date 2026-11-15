@@ -8,6 +8,7 @@ import { ORDER_NUMBER_SEARCH_RE } from '@/lib/order-number';
 import { normalizePhonePH, phoneVariants } from '@/lib/order-guard';
 import { PRODUCTS } from '@/lib/products';
 import { SITE_URL } from '@/lib/seo';
+import { isRewardsTopic, rewardsReply, endRewardsChat } from '@/lib/rewards-helper';
 
 const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
 // GET is Facebook's one-time verify handshake; POST is the untrusted inbound
@@ -317,10 +318,18 @@ async function handleMessage(senderPsid, messageText) {
   // Owner is handling this thread — stay quiet.
   if (inHandoff(senderPsid)) return;
 
+  if (isRewardsTopic(senderPsid, messageText)) {
+    await sendReply(senderPsid, await rewardsReply(senderPsid, messageText));
+    return;
+  }
+
   await sendWelcome(senderPsid);
 }
 
 async function handlePostback(senderPsid, payload) {
+  // Any menu tap leaves the voucher helper; free text after it gets the
+  // normal flow unless it mentions vouchers again.
+  endRewardsChat(senderPsid);
   switch (payload) {
     case 'MENU_ORDER':
       humanHandoff.delete(senderPsid);
