@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
 import AnimatedHero from '@/components/AnimatedHero';
 import PurifyProcess from '@/components/PurifyProcess';
@@ -7,6 +8,7 @@ import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { FB_PAGE_ID } from '@/pages/_app';
 import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
+import { readLastOrder } from '@/lib/client-storage';
 
 const features = [
   {
@@ -39,10 +41,14 @@ function Jug() {
 
 export default function Home() {
   const catalog = useStorefrontCatalog();
+  const [canReorder, setCanReorder] = useState(false);
+  useEffect(() => {
+    queueMicrotask(() => setCanReorder(Boolean(readLastOrder())));
+  }, []);
 
   return (
     <Layout title="Anchor Drops — Scheduled Water Delivery, Tracked & Rewarded" background={<WaterBackground />}>
-      <AnimatedHero />
+      <AnimatedHero canReorder={canReorder} />
 
       {/* Stats highlights */}
       <section className="max-w-6xl mx-auto px-4 pb-12">

@@ -25,12 +25,16 @@ export default async function handler(req, res) {
     if (!row || row.expires_at <= nowIso) return res.status(200).json({ valid: false });
 
     if (row.attempts >= CODE_MAX_ATTEMPTS) {
-      await supabase.from('reward_codes').update({ used: true }).eq('id', row.id);
       return res.status(200).json({ valid: false });
     }
-    await supabase.from('reward_codes').update({ attempts: row.attempts + 1 }).eq('id', row.id);
+    const matches = timingSafeEqual(row.code_hash, hashCode(phone, code));
+    const nextAttempts = row.attempts + 1;
+    const { data: reserved, error: reserveError } = await supabase.from('reward_codes')
+      .update({ attempts: nextAttempts, used: !matches && nextAttempts >= CODE_MAX_ATTEMPTS })
+      .eq('id', row.id).eq('attempts', row.attempts).eq('used', false).select('id');
+    if (reserveError || !reserved?.length) return res.status(200).json({ valid: false });
 
-    if (timingSafeEqual(row.code_hash, hashCode(phone, code))) {
+    if (matches) {
       const { data: orderRows } = await supabase
         .from('orders').select('status, container_size, quantity, voucher_count').eq('phone_normalized', phone);
       const { available } = computeRewards(orderRows || []);

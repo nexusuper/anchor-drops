@@ -21,6 +21,10 @@ test('og:image points at the real domain and resolves', async ({ page, request }
 });
 
 test('order form renders its required fields', async ({ page }) => {
+  await page.route('**/api/ordering-status', (route) => route.fulfill({ json: {
+    enabled: true,
+    products: [{ id: 'bottle_500', name: '500 mL Bottle', kind: 'bottle', size: '500 mL', refill: 11, container: 0, fulfillment: 'pickup' }],
+  } }));
   await page.goto('/order');
   await expect(page.locator('input[name="phone"], input[type="tel"]').first()).toBeVisible();
 });

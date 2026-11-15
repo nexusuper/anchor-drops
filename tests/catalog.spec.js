@@ -60,6 +60,89 @@ test('late-loaded catalog content becomes visible on home and order pages', asyn
   await expect(orderHeading.locator('..')).toHaveCSS('opacity', '1');
 });
 
+test('saved mobile reorder reviews next-day refill schedule before submission', async ({ page }) => {
+  const deliveryRefill = { ...refill, id: 'round5', name: 'Round Refill (Delivery)', fulfillment: 'delivery' };
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('anchor-drops:identity', JSON.stringify({
+    saved_at: Date.now(), customer_name: 'Sample Customer', phone: '09171234567',
+    address: 'Villa Trinitas', barangay: 'Bugo', lat: null, lng: null,
+    lastOrder: { product_type: 'round5', quantity: 2, fulfillment: 'delivery' },
+  })));
+  await page.route('**/api/ordering-status', (route) => route.fulfill({ json: { enabled: true, products: [deliveryRefill] } }));
+  await page.route('**/api/order-quote', (route) => route.fulfill({ json: {
+    lines: [{ sku: 'round5', refill_price: 25, container_price: 0 }], subtotal: 50, delivery_fee: 0,
+  } }));
+  await page.route('**/api/rewards?phone=*', (route) => route.fulfill({ json: { deliveredGallons: 3, available: 0 } }));
+  let submitted;
+  await page.route('**/api/orders', (route) => {
+    submitted = route.request().postDataJSON();
+    return route.fulfill({ status: 201, json: { id: submitted.client_order_id } });
+  });
+  await page.route('**/api/orders/*', (route) => route.fulfill({ json: { status: 'pending', product_type: 'round5' } }));
+
+  await page.goto('/');
+  await page.getByRole('link', { name: 'REORDER WATER' }).click();
+  const review = await page.getByRole('link', { name: 'Review order' }).boundingBox();
+  const messenger = await page.getByRole('link', { name: 'Chat with us on Messenger' }).boundingBox();
+  if (review && messenger) expect(messenger.y + messenger.height <= review.y).toBe(true);
+  await expect(page.getByRole('radio', { name: 'Round Refill (Delivery)' })).toBeChecked();
+  await expect(page.getByLabel('Quantity (refills)')).toHaveValue('2');
+  await expect(page.getByText('Villa Trinitas, Bugo', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('3 of 10 toward your next reward')).toBeVisible();
+  await page.getByRole('button', { name: 'Tomorrow' }).click();
+  await page.getByLabel('Empty-gallon pickup time').selectOption('16:30');
+  await expect(page.getByText(/Late pickup: no 1–2 hour slot/)).toBeVisible();
+  await page.getByRole('button', { name: 'Place Order →' }).click();
+  await expect(page).toHaveURL(/\/order\/confirmation/);
+  expect(submitted).toMatchObject({ product_type: 'round5', quantity: 2, has_empty_containers: true, deliveryTime: '08:00' });
+});
+
+test('changing saved phone removes previous customer details and reorder shortcut', async ({ page }) => {
+  await page.goto('/order?product=bottle_500');
+  await page.evaluate(() => localStorage.setItem('anchor-drops:identity', JSON.stringify({
+    saved_at: Date.now(), customer_name: 'Previous Customer', phone: '09171234567',
+    address: 'Villa Trinitas', barangay: 'Bugo', lat: null, lng: null,
+    lastOrder: { product_type: 'bottle_500', quantity: 1, fulfillment: 'pickup' },
+  })));
+  await page.reload();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.getByLabel('Phone Number').fill('09998887777');
+  await expect(page.getByLabel('Full Name')).toHaveValue('');
+  expect(await page.evaluate(() => localStorage.getItem('anchor-drops:identity'))).toBeNull();
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'REORDER WATER' })).toHaveCount(0);
+});
+
+test('late reward verification cannot restore a changed reward choice', async ({ page }) => {
+  const alternateRefill = { ...refill, id: 'slim5_pickup', name: 'Slim Refill (Pickup)' };
+  await page.route('**/api/ordering-status', (route) => route.fulfill({ json: { enabled: true, products: [refill, alternateRefill] } }));
+  await page.route('**/api/order-quote', (route) => route.fulfill({ json: {
+    lines: [{ sku: refill.id, refill_price: 25, container_price: 0 }], subtotal: 25, delivery_fee: 0,
+  } }));
+  await page.route('**/api/rewards?phone=*', (route) => route.fulfill({ json: { deliveredGallons: 10, available: 1 } }));
+  await page.route('**/api/rewards/send-code', (route) => route.fulfill({ json: { sent: true } }));
+  await page.route('**/api/rewards/verify-code', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.fulfill({ json: { valid: true, available: 1 } });
+  });
+  await page.goto('/order?product=round5_pickup');
+  await page.getByLabel('Phone Number').fill('09171234567');
+  await page.getByRole('button', { name: 'Use more' }).click();
+  await page.getByRole('button', { name: 'Verify with a Messenger code' }).click();
+  await page.getByPlaceholder('123456').fill('123456');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await page.getByRole('button', { name: 'Use fewer' }).click();
+  await page.waitForTimeout(600);
+  await expect(page.getByText(/Code verified/)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Use more' }).click();
+  await page.getByRole('button', { name: 'Verify with a Messenger code' }).click();
+  await page.getByPlaceholder('123456').fill('123456');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await page.getByRole('radio', { name: 'Slim Refill (Pickup)' }).check();
+  await page.getByRole('button', { name: 'Use more' }).click();
+  await expect(page.getByRole('button', { name: 'Verify with a Messenger code' })).toBeVisible();
+});
+
 test('bottle order lets the customer switch pickup to delivery', async ({ page }) => {
   await page.goto('/order?product=bottle_500');
   await expect(page.getByRole('radio', { name: 'Store pickup', exact: true })).toBeChecked();
@@ -141,7 +224,9 @@ test('checkout requires confirmation when the verified refill discount changes',
     json: { enabled: true, products: [refill] },
   }));
   await page.route('**/api/order-quote', (route) => route.fulfill({ json: quote }));
-  await page.route('**/api/rewards?phone=*', (route) => route.fulfill({ json: { available: 1 } }));
+  await page.route('**/api/rewards?phone=*', (route) => route.fulfill({ json: {
+    available: 1, deliveredGallons: 10, progressPct: 0, gallonsToNext: 10,
+  } }));
   await page.route('**/api/rewards/send-code', (route) => route.fulfill({ json: { sent: true } }));
   await page.route('**/api/rewards/verify-code', (route) => route.fulfill({ json: { valid: true, available: 1 } }));
   await page.route('**/api/orders/*', (route) => route.fulfill({
@@ -184,4 +269,9 @@ test('checkout requires confirmation when the verified refill discount changes',
   await page.getByRole('button', { name: 'Confirm New Total →' }).click();
   await expect(page).toHaveURL(/\/order\/confirmation/);
   expect(totals).toEqual([0, 25]);
+  await page.getByRole('link', { name: 'Check your rewards' }).click();
+  await page.getByLabel('Your Phone Number').fill('09171234567');
+  await page.getByRole('button', { name: 'Check' }).click();
+  await expect(page.getByText('Free refills available')).toBeVisible();
+  await expect(page.getByText('10 refills delivered all-time')).toBeVisible();
 });

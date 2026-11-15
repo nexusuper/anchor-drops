@@ -338,13 +338,14 @@ export default async function handler(req, res) {
           .limit(1);
         const row = codeRows?.[0];
         const nowIso = new Date().toISOString();
-        if (row && row.expires_at > nowIso && row.attempts < CODE_MAX_ATTEMPTS) {
+        if (row && row.expires_at > nowIso && row.attempts <= CODE_MAX_ATTEMPTS) {
           if (timingSafeEqual(row.code_hash, hashCode(normPhone, String(reward_code)))) {
             const { data: claimed } = await supabase
               .from('reward_codes')
               .update({ used: true })
               .eq('id', row.id)
               .eq('used', false)
+              .eq('attempts', row.attempts)
               .select('id');
             if (claimed && claimed.length > 0) {
               claimedRewardCodeId = row.id;
@@ -352,14 +353,15 @@ export default async function handler(req, res) {
             } else {
               reward_requested_store = requested;
             }
+          } else if (row.attempts < CODE_MAX_ATTEMPTS) {
+            const nextAttempts = row.attempts + 1;
+            await supabase.from('reward_codes').update({ attempts: nextAttempts, used: nextAttempts >= CODE_MAX_ATTEMPTS })
+              .eq('id', row.id).eq('attempts', row.attempts).eq('used', false);
+            reward_requested_store = requested;
           } else {
-            await supabase.from('reward_codes').update({ attempts: row.attempts + 1 }).eq('id', row.id);
             reward_requested_store = requested;
           }
         } else {
-          if (row && row.attempts >= CODE_MAX_ATTEMPTS) {
-            await supabase.from('reward_codes').update({ used: true }).eq('id', row.id);
-          }
           reward_requested_store = requested;
         }
       } catch (e) {
@@ -433,11 +435,11 @@ export default async function handler(req, res) {
     });
 
     if (rpcErr) {
+      if (claimedRewardCodeId) {
+        await supabase.from('reward_codes').update({ used: false }).eq('id', claimedRewardCodeId);
+      }
+      if (screenshotPath) await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
       if (['PT409', '22023', '23505'].includes(rpcErr.code)) {
-        if (claimedRewardCodeId) {
-          await supabase.from('reward_codes').update({ used: false }).eq('id', claimedRewardCodeId);
-        }
-        if (screenshotPath) await supabase.storage.from('payment-screenshots').remove([screenshotPath]);
         if (rpcErr.code === '23505') return res.status(409).json({ error: 'That order reference is already in use. Please try again.' });
         if (rpcErr.code === '22023') return res.status(400).json({ error: rpcErr.message });
         let revisedReward = null;

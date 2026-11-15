@@ -1,6 +1,6 @@
 import ClayButton from './ui/ClayButton';
 
-export default function AnimatedHero() {
+export default function AnimatedHero({ canReorder }) {
   return (
     <section className="min-h-[88dvh] flex items-center px-4 py-10">
       <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-12 lg:gap-16 items-center">
@@ -23,6 +23,7 @@ export default function AnimatedHero() {
 
           <div className="flex flex-wrap gap-3">
             <ClayButton href="/order" size="lg">ORDER WATER</ClayButton>
+            {canReorder && <ClayButton href="/order?reorder=1" variant="outline" size="lg">REORDER WATER</ClayButton>}
             <ClayButton href="/products" variant="outline" size="lg">VIEW PRICES</ClayButton>
           </div>
 

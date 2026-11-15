@@ -1,5 +1,5 @@
 import Layout from '@/components/Layout';
-import { MIN_DELIVERY_QTY, DELIVERY_MIN_MESSAGE } from '@/lib/order-guard';
+import { MIN_DELIVERY_QTY, DELIVERY_MIN_MESSAGE, normalizePhonePH } from '@/lib/order-guard';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import ClayCard from '@/components/ui/ClayCard';
@@ -9,8 +9,8 @@ import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY, STORE_ADDRESS_DISPLAY } from '@/lib/products';
 import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
 import {
-  classifyPickupTime, computeAllowedDeliveryWindow, validateSchedule, manilaToday, manilaNowTime,
-  timeSlots, STORE_HOURS_LABEL,
+  computeAutomaticDelivery, validateSchedule, manilaToday, manilaNowTime,
+  timeSlots, STORE_HOURS_LABEL, addDays,
 } from '@/lib/scheduling';
 
 // '13:30' -> '1:30 PM'
@@ -35,8 +35,21 @@ function TimeSelect({ id, value, onChange, date, today, nowTime, minTime, maxTim
     </>
   );
 }
+function DateChoice({ id, value, onChange, today, label }) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-clay-ink2 mb-2">{label} *</label>
+      <div className="flex gap-2 mb-2">
+        {[['Today', today], ['Tomorrow', addDays(today, 1)]].map(([text, date]) => (
+          <button key={date} type="button" onClick={() => onChange(date)} aria-pressed={value === date} className={`rounded-full px-4 py-2 text-sm font-semibold clay-tile ${value === date ? 'clay-tile-selected' : ''}`}>{text}</button>
+        ))}
+      </div>
+      <input id={id} required type="date" min={today} value={value} onChange={(e) => onChange(e.target.value)} className="clay-input" />
+    </div>
+  );
+}
 import {
-  DRAFT_KEY, readStored, readIdentity, writeIdentity, clearIdentity, writeOrderPhone,
+  DRAFT_KEY, readStored, readIdentity, readLastOrder, writeIdentity, clearIdentity, writeOrderPhone,
 } from '@/lib/client-storage';
 import { uuidv4 } from '@/lib/uuid';
 import { CDO_BARANGAYS, matchBarangay } from '@/lib/service-area';
@@ -134,6 +147,11 @@ function OrderForm({ queryProduct, availableProducts }) {
   const router = useRouter();
   const [form, setForm] = useState({ ...EMPTY_FORM, product_type: queryProduct || EMPTY_FORM.product_type });
   const [restoredIdentity, setRestoredIdentity] = useState(false);
+  const [showIdentity, setShowIdentity] = useState(true);
+  const [showOptionalMap, setShowOptionalMap] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [fieldTouched, setFieldTouched] = useState({});
+  const [submitted, setSubmitted] = useState(false);
   const hydratedRef = useRef(false);
   // One idempotency key per form session, minted on the first submit and reused
   // by every retry. create_order dedupes on p_client_order_id, so a retry after
@@ -150,6 +168,7 @@ function OrderForm({ queryProduct, availableProducts }) {
   const [screenshotError, setScreenshotError] = useState('');
   const [quoteResult, setQuoteResult] = useState(null);
   const [quoteAttempt, setQuoteAttempt] = useState(0);
+  const rewardRequestVersion = useRef(0);
 
   function resetReward() {
     setRewardCount(0);
@@ -167,12 +186,14 @@ function OrderForm({ queryProduct, availableProducts }) {
     // This IS the reorder path now — "order the same again" just means landing on
     // a form already filled from the identity this device saved last time.
     const identity = readIdentity();
-    if (!draft && !identity) return;
+    const reorder = router.query.reorder === '1' ? readLastOrder() : null;
+    if (!draft && !identity && !reorder) return;
     queueMicrotask(() => {
       setForm((f) => ({
         ...f,
         ...identity,
-        ...draft,
+        ...(reorder || draft),
+        ...(reorder && { pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '', payment_method: 'cod' }),
         ...(queryProduct && draft?.product_type !== queryProduct && {
           product_type: queryProduct,
           fulfillment: 'pickup',
@@ -180,9 +201,12 @@ function OrderForm({ queryProduct, availableProducts }) {
         }),
         payment_screenshot: '',
       }));
-      if (identity?.customer_name) setRestoredIdentity(true);
+      if (identity?.customer_name) {
+        setRestoredIdentity(true);
+        setShowIdentity(false);
+      }
     });
-  }, [queryProduct]);
+  }, [queryProduct, router.query.reorder]);
 
   // Persist the in-progress draft. payment_screenshot is a multi-hundred-KB data
   // URL and would blow the sessionStorage quota, so it is deliberately excluded.
@@ -196,8 +220,12 @@ function OrderForm({ queryProduct, availableProducts }) {
 
   function forgetIdentity() {
     clearIdentity();
+    rewardRequestVersion.current += 1;
     setRestoredIdentity(false);
-    setForm(EMPTY_FORM);
+    setShowIdentity(true);
+    setRewards(null);
+    resetReward();
+    setForm((f) => ({ ...EMPTY_FORM, product_type: f.product_type, fulfillment: f.fulfillment, quantity: f.quantity }));
   }
 
   // ponytail: reorder seeds from this device's own saved identity (above), not
@@ -215,6 +243,7 @@ function OrderForm({ queryProduct, availableProducts }) {
   const unit = productUnit(selectedProduct);
   const fulfillment = isBottle ? form.fulfillment : selectedProduct.fulfillment;
   const storePickup = fulfillment === 'pickup';
+  const savedIdentityReady = restoredIdentity && (storePickup || (form.address && form.barangay && (!isBottle || (form.lat != null && form.lng != null))));
   const minQty = storePickup || !isRefill ? 1 : MIN_DELIVERY_QTY;
   const needContainer = isRefill && form.need_container;
   const hasEmptyContainers = isRefill && !storePickup && !needContainer && form.has_empty_containers;
@@ -268,16 +297,23 @@ function OrderForm({ queryProduct, availableProducts }) {
       });
       return;
     }
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) {
+        setRewards(null);
+        resetReward();
+      }
+    });
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/rewards?phone=${encodeURIComponent(digits)}`);
-        if (res.ok) setRewards(await res.json());
-        else setRewards(null);
+        const res = await fetch(`/api/rewards?phone=${encodeURIComponent(digits)}`, { signal: controller.signal });
+        const data = await res.json();
+        if (!controller.signal.aborted) setRewards(res.ok ? data : null);
       } catch {
-        setRewards(null);
+        if (!controller.signal.aborted) setRewards(null);
       }
     }, 500);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); controller.abort(); };
   }, [form.phone, isRefill]);
 
   const quotedProduct = quote?.lines[0];
@@ -291,6 +327,7 @@ function OrderForm({ queryProduct, availableProducts }) {
     quantity: form.quantity,
     refillSubtotal: refillTotal,
   });
+  const loyaltyProgress = (Number(rewards?.deliveredGallons) || 0) % 10;
   const codeApplied = isRefill && codePhase === 'verified';
   const rewardSelection = JSON.stringify([form.phone, rewardCount, codeApplied ? codeInput : null]);
   const revisedReward = currentQuote?.rewardSelection === rewardSelection ? currentQuote.revisedReward : null;
@@ -307,28 +344,30 @@ function OrderForm({ queryProduct, availableProducts }) {
     const d = normalizePhone(raw);
     return /^09\d{9}$/.test(d) || /^639\d{9}$/.test(d);
   };
-  const phoneInvalid = form.phone.trim().length > 0 && !isPhMobile(form.phone);
-  const barangayInvalid = form.barangay.trim().length > 0 && !matchBarangay(form.barangay);
-  const gcashInvalid = form.payment_method === 'gcash' && form.gcash_number.trim().length > 0 && !isPhMobile(form.gcash_number);
+  const phoneInvalid = (fieldTouched.phone || submitted) && form.phone.trim().length > 0 && !isPhMobile(form.phone);
+  const barangayInvalid = (fieldTouched.barangay || submitted) && form.barangay.trim().length > 0 && !matchBarangay(form.barangay);
+  const gcashInvalid = form.payment_method === 'gcash' && (fieldTouched.gcash_number || submitted) && form.gcash_number.trim().length > 0 && !isPhMobile(form.gcash_number);
 
   const today = manilaToday();
   const nowTime = manilaNowTime();
-  const pickupSlot = classifyPickupTime(form.pickup_time);
-  const showAfternoonNotice = hasEmptyContainers && pickupSlot === 'afternoon';
-  const allowedDelivery = hasEmptyContainers
-    ? computeAllowedDeliveryWindow({ pickupDate: form.pickup_date, pickupTime: form.pickup_time })
+  const automaticDelivery = hasEmptyContainers
+    ? computeAutomaticDelivery({ pickupDate: form.pickup_date, pickupTime: form.pickup_time })
     : null;
+  const deliveryDate = automaticDelivery?.deliveryDate || form.delivery_date;
+  const deliveryTime = automaticDelivery?.deliveryTime || form.delivery_time;
   const scheduleCheck = validateSchedule({
     hasEmptyContainers,
     pickupDate: form.pickup_date || null,
     pickupTime: form.pickup_time || null,
-    deliveryDate: form.delivery_date,
-    deliveryTime: form.delivery_time,
+    deliveryDate,
+    deliveryTime,
     today,
     nowTime,
   });
 
   function selectFulfillment(product, mode) {
+    rewardRequestVersion.current += 1;
+    resetReward();
     setError('');
     setForm((f) => ({
       ...f,
@@ -346,22 +385,13 @@ function OrderForm({ queryProduct, availableProducts }) {
     if (form.quantity < minQty) queueMicrotask(() => setForm((f) => ({ ...f, quantity: Math.max(f.quantity, minQty) })));
   }, [form.quantity, minQty]);
 
-  // Default the delivery date to the earliest allowed day whenever the pickup
-  // slot changes. Morning pickup locks to that same day; afternoon pickup only
-  // suggests the next open day — the customer can still pick a later one.
-  const earliestDeliveryDate = allowedDelivery?.minDate;
-  useEffect(() => {
-    if (earliestDeliveryDate) {
-      queueMicrotask(() => setForm((f) => ({ ...f, delivery_date: earliestDeliveryDate })));
-    }
-  }, [earliestDeliveryDate]);
-
   // Keep the chosen count within bounds; any bound change cancels a prior verification.
   useEffect(() => {
     queueMicrotask(() => setRewardCount((n) => Math.min(n, maxVouchers)));
   }, [maxVouchers]);
 
   function changeCount(next) {
+    rewardRequestVersion.current += 1;
     setRewardCount(Math.max(0, Math.min(maxVouchers, next)));
     setCodePhase('idle');
     setCodeInput('');
@@ -369,6 +399,7 @@ function OrderForm({ queryProduct, availableProducts }) {
   }
 
   async function sendCode() {
+    const requestVersion = rewardRequestVersion.current;
     setCodePhase('sending');
     setCodeError('');
     try {
@@ -378,15 +409,18 @@ function OrderForm({ queryProduct, availableProducts }) {
         body: JSON.stringify({ phone: form.phone }),
       });
       const data = await res.json();
+      if (requestVersion !== rewardRequestVersion.current) return;
       setCodeReason(data.reason || '');
       setCodePhase(res.ok && data.sent ? 'entry' : 'fallback');
     } catch {
+      if (requestVersion !== rewardRequestVersion.current) return;
       setCodeReason('');
       setCodePhase('fallback');
     }
   }
 
   async function verifyCode() {
+    const requestVersion = rewardRequestVersion.current;
     setCodePhase('verifying');
     setCodeError('');
     try {
@@ -396,6 +430,7 @@ function OrderForm({ queryProduct, availableProducts }) {
         body: JSON.stringify({ phone: form.phone, code: codeInput }),
       });
       const data = await res.json();
+      if (requestVersion !== rewardRequestVersion.current) return;
       if (res.ok && data.valid) {
         setCodePhase('verified');
       } else {
@@ -403,6 +438,7 @@ function OrderForm({ queryProduct, availableProducts }) {
         setCodeError('That code is invalid or expired.');
       }
     } catch {
+      if (requestVersion !== rewardRequestVersion.current) return;
       setCodePhase('entry');
       setCodeError('Could not verify. Please try again.');
     }
@@ -410,9 +446,13 @@ function OrderForm({ queryProduct, availableProducts }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    setSubmitted(true);
     setError('');
+    const focus = (id) => setTimeout(() => document.getElementById(id)?.focus(), 0);
     if (!isPhMobile(form.phone)) {
+      setShowIdentity(true);
       setError('Please enter a valid PH mobile number (09XX-XXX-XXXX).');
+      focus('phone');
       return;
     }
     if (form.quantity < minQty) {
@@ -420,15 +460,19 @@ function OrderForm({ queryProduct, availableProducts }) {
       return;
     }
     if (!storePickup && !matchBarangay(form.barangay)) {
+      setShowIdentity(true);
       setError('We deliver within Cagayan de Oro only. Please pick your barangay from the list.');
+      focus('barangay');
       return;
     }
     if (form.payment_method === 'gcash' && form.gcash_number.trim() && !isPhMobile(form.gcash_number)) {
       setError('Please enter a valid GCash mobile number (09XX-XXX-XXXX).');
+      focus('gcash_number');
       return;
     }
     if (!scheduleCheck.ok) {
       setError(scheduleCheck.error);
+      focus(hasEmptyContainers ? 'pickup_date' : 'delivery_date');
       return;
     }
     if (!quote) {
@@ -466,8 +510,8 @@ function OrderForm({ queryProduct, availableProducts }) {
           has_empty_containers: hasEmptyContainers,
           pickupDate: hasEmptyContainers ? form.pickup_date : null,
           pickupTime: hasEmptyContainers ? form.pickup_time : null,
-          deliveryDate: form.delivery_date,
-          deliveryTime: form.delivery_time,
+          deliveryDate,
+          deliveryTime,
         }),
       });
       const data = await res.json();
@@ -480,7 +524,9 @@ function OrderForm({ queryProduct, availableProducts }) {
       });
       if (res.status === 400 && data.quoteUnavailable) setQuoteResult({ key: quoteKey, error: data.error });
       if (!res.ok) throw new Error(data.error || 'Failed to place order');
-      writeIdentity(Object.fromEntries(IDENTITY_FIELDS.map((k) => [k, form[k]])));
+      writeIdentity(Object.fromEntries(IDENTITY_FIELDS.map((k) => [k, form[k]])), {
+        product_type: selectedProduct.id, quantity: form.quantity, fulfillment,
+      });
       try { window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* nicety */ }
       // The phone rides in sessionStorage, never the query string — see the note
       // in lib/client-storage.js. The order id stays in the URL so the
@@ -507,152 +553,8 @@ function OrderForm({ queryProduct, availableProducts }) {
         </a>
       </section>
 
-      <div className="max-w-2xl mx-auto px-4 py-10">
+      <div className="max-w-2xl mx-auto px-4 pt-8 pb-28 md:py-10">
         <form onSubmit={handleSubmit} className="space-y-6">
-
-          {/* Customer Info */}
-          <ClayCard className="p-6">
-            <div className="flex items-baseline justify-between mb-4">
-              <h2 className="text-lg font-editorial font-semibold text-clay-ink2">Your Information</h2>
-              {restoredIdentity && (
-                <button type="button" onClick={forgetIdentity} className="text-xs font-semibold text-clay-skydeep hover:underline">
-                  Not you? Clear
-                </button>
-              )}
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="customer_name" className="block text-sm font-medium text-clay-ink2 mb-1">Full Name *</label>
-                <input id="customer_name" required value={form.customer_name} onChange={(e) => set('customer_name', e.target.value)} className="clay-input" placeholder="Juan Dela Cruz" autoComplete="name" />
-              </div>
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-clay-ink2 mb-1">Phone Number *</label>
-                <input id="phone" required type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
-                {phoneInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
-              </div>
-              {storePickup ? (
-                <div className="clay-inset rounded-xl p-4 text-sm text-clay-ink2" role="status">
-                  <p className="font-semibold mb-1">You&apos;re picking this up at the store.</p>
-                  <p className="text-clay-muted font-semibold">{STORE_ADDRESS_DISPLAY}</p>
-                  <p className="text-clay-muted mt-1">No delivery address needed.</p>
-                </div>
-              ) : (
-              <>
-              <div>
-                <label htmlFor="address" className="block text-sm font-medium text-clay-ink2 mb-1">Street Address *</label>
-                <input id="address" required value={form.address} onChange={(e) => set('address', e.target.value)} className="clay-input" placeholder="123 Rizal St." autoComplete="street-address" />
-              </div>
-              <div>
-                <label htmlFor="barangay" className="block text-sm font-medium text-clay-ink2 mb-1">Barangay *</label>
-                {/* ponytail: native datalist, not a combobox component — it
-                    autocompletes the real barangay names so most customers never
-                    hit the server-side rejection below. */}
-                <input id="barangay" required list="cdo-barangays" value={form.barangay} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" autoComplete="address-level3" />
-                <datalist id="cdo-barangays">
-                  {CDO_BARANGAYS.map((b) => <option key={b} value={b} />)}
-                </datalist>
-                {barangayInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">We deliver within Cagayan de Oro only. Pick your barangay from the list.</p>}
-              </div>
-              <div>
-                <p className="block text-sm font-medium text-clay-ink2 mb-1">
-                  {isBottle ? 'Pin your delivery location (required)' : 'Pin your location on the map (optional)'}
-                </p>
-                <p className="text-xs text-clay-muted mb-2">
-                  {isBottle ? 'Your pin determines availability and the delivery fee.' : 'Helps our driver find your delivery address.'}
-                </p>
-                <LocationPicker
-                  value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
-                  onChange={(pt) => setForm((f) => ({ ...f, lat: pt?.lat ?? null, lng: pt?.lng ?? null }))}
-                />
-              </div>
-              </>
-              )}
-            </div>
-          </ClayCard>
-
-          {/* Loyalty reward */}
-          {isRefill && rewards && rewards.available > 0 && (
-            <ClayCard variant="inset" className="p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <span className="grid place-items-center w-11 h-11 rounded-2xl text-white clay-raised-sm" style={{ background: 'linear-gradient(145deg,#38bdf8,#0284c7)' }}>
-                  <ClayIcon name="party" className="w-6 h-6" />
-                </span>
-                <div>
-                  <p className="font-editorial font-bold text-clay-ink">You have {rewards.available} free refill{rewards.available > 1 ? 's' : ''}!</p>
-                  <p className="text-xs text-clay-muted font-semibold">Each free gallon refill saves you up to ₱{voucherValue}.</p>
-                </div>
-              </div>
-
-              {maxVouchers > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-clay-ink2">Free refills to use</span>
-                    <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => changeCount(rewardCount - 1)} className="w-11 h-11 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable" aria-label="Use fewer">−</button>
-                      <span className="font-editorial font-bold text-clay-ink w-6 text-center">{rewardCount}</span>
-                      <button type="button" onClick={() => changeCount(rewardCount + 1)} className="w-11 h-11 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable" aria-label="Use more">+</button>
-                    </div>
-                  </div>
-
-                  {rewardCount > 0 && (
-                    <>
-                      {codePhase === 'idle' && (
-                        <button type="button" onClick={sendCode} className="w-full clay-btn-primary clay-pressable rounded-full py-2.5 font-editorial font-semibold text-sm">
-                          Verify with a Messenger code
-                        </button>
-                      )}
-                      {codePhase === 'sending' && (
-                        <p className="text-xs text-clay-muted font-semibold text-center">Sending your code…</p>
-                      )}
-                      {(codePhase === 'entry' || codePhase === 'verifying') && (
-                        <div className="space-y-2">
-                          <p className="text-xs text-clay-muted font-semibold">Enter the 6-digit code we sent to your Messenger:</p>
-                          <div className="flex gap-2">
-                            <input
-                              value={codeInput}
-                              onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                              inputMode="numeric"
-                              placeholder="123456"
-                              className="clay-input flex-1 font-mono tracking-widest"
-                            />
-                            <button type="button" onClick={verifyCode} disabled={codePhase === 'verifying' || codeInput.length < 6} className="clay-btn-primary clay-pressable rounded-full px-5 font-editorial font-semibold text-sm disabled:opacity-60">
-                              {codePhase === 'verifying' ? '…' : 'Apply'}
-                            </button>
-                          </div>
-                          {codeError && <p className="text-clay-danger text-xs" role="alert">{codeError}</p>}
-                          <button type="button" onClick={() => setCodePhase('fallback')} className="text-xs text-clay-skydeep font-semibold hover:underline">
-                            Didn&apos;t get it? Apply on delivery instead
-                          </button>
-                        </div>
-                      )}
-                      {codePhase === 'verified' && (
-                        <p className="text-sm font-semibold text-clay-skydeep flex items-center gap-1">
-                          <ClayIcon name="check" className="w-4 h-4" />
-                          {appliedRewards > 0
-                            ? `Code verified. ₱${voucherDiscount} off applied.`
-                            : 'No instant discount is available. We’ll review your refill request when we confirm the order.'}
-                        </p>
-                      )}
-                      {codePhase === 'fallback' && (
-                        <div className="space-y-1">
-                          <p className="text-xs text-clay-muted font-semibold">
-                            No problem — we&apos;ll apply your {rewardCount} free refill{rewardCount > 1 ? 's' : ''} when we confirm your delivery.
-                          </p>
-                          {codeReason === 'not_linked' && (
-                            <p className="text-xs text-clay-muted">
-                              Tip: link Messenger from your confirmation page after ordering to get reward codes instantly next time.
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-clay-muted font-semibold">Add a refill to use a voucher on this order.</p>
-              )}
-            </ClayCard>
-          )}
 
           {/* Product Selection */}
           <ClayCard className="p-6">
@@ -727,6 +629,201 @@ function OrderForm({ queryProduct, availableProducts }) {
             </div>
           </ClayCard>
 
+          {/* Customer Info */}
+          <ClayCard className="p-6">
+            <div className="flex items-baseline justify-between mb-4">
+              <h2 className="text-lg font-editorial font-semibold text-clay-ink2">Your Information</h2>
+              {restoredIdentity && (
+                <button type="button" onClick={forgetIdentity} className="text-xs font-semibold text-clay-skydeep hover:underline">
+                  Not you? Clear
+                </button>
+              )}
+            </div>
+            {savedIdentityReady && !showIdentity && <div className="clay-inset rounded-xl p-4 text-sm flex items-center justify-between gap-3">
+              <div><p className="font-semibold">{form.customer_name} · {form.phone}</p><p className="text-clay-muted">{storePickup ? 'Store pickup' : `${form.address}, ${form.barangay}`}</p></div>
+              <button type="button" onClick={() => setShowIdentity(true)} className="text-clay-skydeep font-semibold shrink-0">Edit</button>
+            </div>}
+            {(!savedIdentityReady || showIdentity) && <div className="space-y-4">
+              <div>
+                <label htmlFor="customer_name" className="block text-sm font-medium text-clay-ink2 mb-1">Full Name *</label>
+                <input id="customer_name" required value={form.customer_name} onChange={(e) => set('customer_name', e.target.value)} className="clay-input" placeholder="Juan Dela Cruz" autoComplete="name" />
+              </div>
+              <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-clay-ink2 mb-1">Phone Number *</label>
+                <input id="phone" required type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onBlur={() => setFieldTouched((f) => ({ ...f, phone: true }))} onChange={(e) => {
+                  const phone = e.target.value;
+                  if (restoredIdentity && normalizePhonePH(phone) !== normalizePhonePH(form.phone)) {
+                    clearIdentity();
+                    setForm((f) => ({ ...f, phone, customer_name: '', address: '', barangay: '', lat: null, lng: null }));
+                    setRestoredIdentity(false);
+                  } else set('phone', phone);
+                  rewardRequestVersion.current += 1;
+                  setRewards(null);
+                  resetReward();
+                }} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                {phoneInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
+              </div>
+              {storePickup ? (
+                <div className="clay-inset rounded-xl p-4 text-sm text-clay-ink2" role="status">
+                  <p className="font-semibold mb-1">You&apos;re picking this up at the store.</p>
+                  <p className="text-clay-muted font-semibold">{STORE_ADDRESS_DISPLAY}</p>
+                  <p className="text-clay-muted mt-1">No delivery address needed.</p>
+                </div>
+              ) : (
+              <>
+              <div>
+                <label htmlFor="address" className="block text-sm font-medium text-clay-ink2 mb-1">Street Address *</label>
+                <input id="address" required value={form.address} onChange={(e) => set('address', e.target.value)} className="clay-input" placeholder="123 Rizal St." autoComplete="street-address" />
+              </div>
+              <div>
+                <label htmlFor="barangay" className="block text-sm font-medium text-clay-ink2 mb-1">Barangay *</label>
+                {/* ponytail: native datalist, not a combobox component — it
+                    autocompletes the real barangay names so most customers never
+                    hit the server-side rejection below. */}
+                <input id="barangay" required list="cdo-barangays" value={form.barangay} onBlur={() => setFieldTouched((f) => ({ ...f, barangay: true }))} onChange={(e) => set('barangay', e.target.value)} className="clay-input" placeholder="Brgy. San Jose" autoComplete="address-level3" />
+                <datalist id="cdo-barangays">
+                  {CDO_BARANGAYS.map((b) => <option key={b} value={b} />)}
+                </datalist>
+                {barangayInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">We deliver within Cagayan de Oro only. Pick your barangay from the list.</p>}
+              </div>
+              {(isBottle || showOptionalMap) && <div>
+                <p className="block text-sm font-medium text-clay-ink2 mb-1">
+                  {isBottle ? 'Pin your delivery location (required)' : 'Pin your location on the map (optional)'}
+                </p>
+                <p className="text-xs text-clay-muted mb-2">
+                  {isBottle ? 'Your pin determines availability and the delivery fee.' : 'Helps our driver find your delivery address.'}
+                </p>
+                <LocationPicker
+                  value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
+                  onChange={(pt) => setForm((f) => ({ ...f, lat: pt?.lat ?? null, lng: pt?.lng ?? null }))}
+                />
+              </div>}
+              {!isBottle && <button type="button" onClick={() => setShowOptionalMap((shown) => !shown)} className="text-sm text-clay-skydeep font-semibold">{showOptionalMap ? 'Hide map' : 'Add delivery pin (optional)'}</button>}
+              </>
+              )}
+            </div>}
+          </ClayCard>
+
+          {/* Scheduling */}
+          <ClayCard className="p-6">
+            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">
+              {storePickup ? 'When are you coming to the store?' : isRefill ? 'Container Pickup & Delivery' : 'Delivery Schedule'}
+            </h2>
+            <div className="space-y-4">
+              {isRefill && !storePickup && <p className="text-sm text-clay-muted">{form.need_container ? 'New containers will be delivered.' : 'We will collect your empty gallons, refill them, and deliver them back.'}</p>}
+              {hasEmptyContainers ? (
+                <>
+                  <DateChoice id="pickup_date" label="Empty-gallon pickup date" value={form.pickup_date} onChange={(date) => setForm((f) => ({ ...f, pickup_date: date, pickup_time: '' }))} today={today} />
+                  <div>
+                    <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Empty-gallon pickup time *</label>
+                    <TimeSelect id="pickup_time" value={form.pickup_time} onChange={(time) => set('pickup_time', time)} date={form.pickup_date} today={today} nowTime={nowTime} />
+                  </div>
+                  {automaticDelivery && <div className="clay-inset rounded-xl p-4 text-sm" role="status">
+                    <p className="font-semibold">Delivery: {automaticDelivery.isNextDay ? 'next day' : 'same day'} at {formatSlot(automaticDelivery.deliveryTime)}</p>
+                    <p className="text-clay-muted mt-1">{automaticDelivery.isNextDay ? 'Late pickup: no 1–2 hour slot fits before 5 PM. Your refill will arrive next day from 8 AM.' : 'Scheduled 1–2 hours after your empty gallons are picked up.'}</p>
+                  </div>}
+                </>
+              ) : (
+                <>
+                  <DateChoice id="delivery_date" label={storePickup ? 'Store pickup date' : 'Delivery date'} value={form.delivery_date} onChange={(date) => setForm((f) => ({ ...f, delivery_date: date, delivery_time: '' }))} today={today} />
+                  <div>
+                    <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">{storePickup ? 'Store pickup' : 'Delivery'} time *</label>
+                    <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(time) => set('delivery_time', time)} date={form.delivery_date} today={today} nowTime={nowTime} />
+                    <p className="text-xs text-clay-muted mt-1">Hours: {STORE_HOURS_LABEL}. Lunch break: 12–1 PM.</p>
+                  </div>
+                </>
+              )}
+              {!scheduleCheck.ok && (deliveryTime || form.pickup_time) && (
+                <p className="text-clay-danger text-xs" role="alert">{scheduleCheck.error}</p>
+              )}
+            </div>
+          </ClayCard>
+
+          {/* Loyalty reward */}
+          {isRefill && (
+            <ClayCard variant="inset" className="p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="grid place-items-center w-11 h-11 rounded-2xl text-white clay-raised-sm" style={{ background: 'linear-gradient(145deg,#38bdf8,#0284c7)' }}>
+                  <ClayIcon name="party" className="w-6 h-6" />
+                </span>
+                <div>
+                  <p className="font-editorial font-bold text-clay-ink">Free refill after 10 delivered refills</p>
+                  <p className="text-xs text-clay-muted font-semibold">{rewards ? `${loyaltyProgress} of 10 toward your next reward · ${rewards.available} available` : 'Enter your phone number to see progress.'}</p>
+                </div>
+              </div>
+              {rewards && <progress className="w-full mb-3 accent-sky-500" value={loyaltyProgress} max="10" aria-label="Free refill progress" />}
+
+              {rewards?.available > 0 && maxVouchers > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-clay-ink2">Free refills to use</span>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => changeCount(rewardCount - 1)} className="w-11 h-11 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable" aria-label="Use fewer">−</button>
+                      <span className="font-editorial font-bold text-clay-ink w-6 text-center">{rewardCount}</span>
+                      <button type="button" onClick={() => changeCount(rewardCount + 1)} className="w-11 h-11 grid place-items-center rounded-full clay-raised-sm text-xl font-bold text-clay-skydeep clay-pressable" aria-label="Use more">+</button>
+                    </div>
+                  </div>
+
+                  {rewardCount > 0 && (
+                    <>
+                      {codePhase === 'idle' && (
+                        <button type="button" onClick={sendCode} className="w-full clay-btn-primary clay-pressable rounded-full py-2.5 font-editorial font-semibold text-sm">
+                          Verify with a Messenger code
+                        </button>
+                      )}
+                      {codePhase === 'sending' && (
+                        <p className="text-xs text-clay-muted font-semibold text-center">Sending your code…</p>
+                      )}
+                      {(codePhase === 'entry' || codePhase === 'verifying') && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-clay-muted font-semibold">Enter the 6-digit code we sent to your Messenger:</p>
+                          <div className="flex gap-2">
+                            <input
+                              value={codeInput}
+                              onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              inputMode="numeric"
+                              placeholder="123456"
+                              className="clay-input flex-1 font-mono tracking-widest"
+                            />
+                            <button type="button" onClick={verifyCode} disabled={codePhase === 'verifying' || codeInput.length < 6} className="clay-btn-primary clay-pressable rounded-full px-5 font-editorial font-semibold text-sm disabled:opacity-60">
+                              {codePhase === 'verifying' ? '…' : 'Apply'}
+                            </button>
+                          </div>
+                          {codeError && <p className="text-clay-danger text-xs" role="alert">{codeError}</p>}
+                          <button type="button" onClick={() => { rewardRequestVersion.current += 1; setCodePhase('fallback'); }} className="text-xs text-clay-skydeep font-semibold hover:underline">
+                            Didn&apos;t get it? Request staff approval instead
+                          </button>
+                        </div>
+                      )}
+                      {codePhase === 'verified' && (
+                        <p className="text-sm font-semibold text-clay-skydeep flex items-center gap-1">
+                          <ClayIcon name="check" className="w-4 h-4" />
+                          {appliedRewards > 0
+                            ? `Code verified. ₱${voucherDiscount} off applied.`
+                            : 'No instant discount is available. We’ll review your refill request when we confirm the order.'}
+                        </p>
+                      )}
+                      {codePhase === 'fallback' && (
+                        <div className="space-y-1">
+                          <p className="text-xs text-clay-muted font-semibold">
+                            No problem — we&apos;ll review your {rewardCount} free refill{rewardCount > 1 ? 's' : ''} when we confirm your order.
+                          </p>
+                          {codeReason === 'not_linked' && (
+                            <p className="text-xs text-clay-muted">
+                              Tip: link Messenger from your confirmation page after ordering to get reward codes instantly next time.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-clay-muted font-semibold">{rewards?.available ? 'Add a refill to use your reward.' : 'Every delivered refill counts toward your next free refill.'}</p>
+              )}
+            </ClayCard>
+          )}
+
           {/* Payment */}
           <ClayCard className="p-6">
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Payment Method</h2>
@@ -752,15 +849,17 @@ function OrderForm({ queryProduct, availableProducts }) {
                 </div>
                 <div>
                   <label htmlFor="gcash_number" className="block text-sm font-medium text-clay-ink2 mb-1">Your GCash Number (if paying via GCash)</label>
-                  <input id="gcash_number" type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
+                  <input id="gcash_number" type="tel" inputMode="tel" autoComplete="tel" value={form.gcash_number} onBlur={() => setFieldTouched((f) => ({ ...f, gcash_number: true }))} onChange={(e) => set('gcash_number', e.target.value)} className="clay-input" placeholder="09XX-XXX-XXXX" />
                   {gcashInvalid && <p className="text-clay-danger text-xs mt-1" role="alert">Please enter a valid PH mobile number (09XX-XXX-XXXX).</p>}
                 </div>
                 <div>
                   <label htmlFor="reference_number" className="block text-sm font-medium text-clay-ink2 mb-1">Reference Number (after payment)</label>
                   <input id="reference_number" value={form.reference_number} onChange={(e) => set('reference_number', e.target.value)} className="clay-input" placeholder="Optional, fill after sending" />
                 </div>
-                <div>
-                  <label htmlFor="payment_screenshot" className="block text-sm font-medium text-clay-ink2 mb-1">Attach Screenshot of Payment (optional)</label>
+                <details>
+                  <summary className="text-sm font-semibold text-clay-skydeep cursor-pointer">Attach payment proof (optional)</summary>
+                  <div className="mt-2">
+                  <label htmlFor="payment_screenshot" className="block text-sm font-medium text-clay-ink2 mb-1">Payment screenshot</label>
                   {!form.payment_screenshot ? (
                     <input
                       id="payment_screenshot"
@@ -794,139 +893,32 @@ function OrderForm({ queryProduct, availableProducts }) {
                     </div>
                   )}
                   {screenshotError && <p className="text-clay-danger text-xs mt-1" role="alert">{screenshotError}</p>}
-                </div>
+                  </div>
+                </details>
               </div>
             )}
           </ClayCard>
 
-          {/* Scheduling */}
-          <ClayCard className="p-6">
-            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">
-              {storePickup ? 'When are you coming to the store?' : isRefill ? 'Container Pickup & Delivery' : 'Delivery Schedule'}
-            </h2>
-            <div className="space-y-4">
-              {storePickup ? (
-                <>
-                  <div>
-                    <label htmlFor="store_pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup date *</label>
-                    <input id="store_pickup_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                  </div>
-                  <div>
-                    <label htmlFor="store_pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Store pickup time *</label>
-                    <TimeSelect id="store_pickup_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} />
-                    <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
-                  </div>
-                </>
-              ) : (
-              <>
-              {isRefill && <div>
-                <label className="block text-sm font-medium text-clay-ink2 mb-2">Do you have empty containers at home for us to pick up? *</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { id: true, label: 'Yes, pick them up' },
-                    { id: false, label: 'No, deliver only' },
-                  ].filter((opt) => opt.id === !form.need_container).map((opt) => (
-                    <label key={String(opt.id)} className={`flex items-center justify-center rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.has_empty_containers === opt.id ? 'clay-tile-selected' : ''}`}>
-                      <input
-                        type="radio"
-                        name="has_empty_containers"
-                        checked={form.has_empty_containers === opt.id}
-                        onChange={() => setForm((f) => ({ ...f, has_empty_containers: opt.id, pickup_date: '', pickup_time: '', delivery_date: '', delivery_time: '' }))}
-                        className="accent-clay-sky mr-2"
-                      />
-                      <span className="font-semibold text-clay-ink">{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>}
-
-              {hasEmptyContainers ? (
-                <>
-                  <div>
-                    <label htmlFor="pickup_date" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup date *</label>
-                    <input id="pickup_date" required type="date" min={today} value={form.pickup_date} onChange={(e) => set('pickup_date', e.target.value)} className="clay-input" />
-                  </div>
-                  <div>
-                    <label htmlFor="pickup_time" className="block text-sm font-medium text-clay-ink2 mb-1">Pickup time *</label>
-                    <TimeSelect id="pickup_time" value={form.pickup_time} onChange={(v) => setForm((f) => ({ ...f, pickup_time: v, delivery_time: '' }))} date={form.pickup_date} today={today} nowTime={nowTime} />
-                    <p className="text-xs text-clay-muted mt-1">
-                      Store hours: {STORE_HOURS_LABEL}. Morning pickup = delivery same afternoon; afternoon pickup = delivery next day or later, your choice.
-                    </p>
-                  </div>
-
-                  {showAfternoonNotice && (
-                    <div className="clay-inset rounded-xl p-3 text-sm text-clay-ink2" role="status">
-                      We will try to pick up in the afternoon. Delivery will be tomorrow or later — pick a date below.
-                    </div>
-                  )}
-
-                  {allowedDelivery && pickupSlot === 'morning' && (
-                    <>
-                      <div>
-                        <label htmlFor="delivery_date_locked" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date</label>
-                        <input id="delivery_date_locked" type="date" value={allowedDelivery.minDate} readOnly disabled className="clay-input opacity-70" />
-                      </div>
-                      <div>
-                        <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={allowedDelivery.minDate} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
-                        <p className="text-xs text-clay-muted mt-1">Same-day delivery: 1:00–5:00 PM.</p>
-                      </div>
-                    </>
-                  )}
-
-                  {allowedDelivery && pickupSlot === 'afternoon' && (
-                    <>
-                      <div>
-                        <label htmlFor="delivery_date_choice" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
-                        <input id="delivery_date_choice" required type="date" min={allowedDelivery.minDate} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                        <p className="text-xs text-clay-muted mt-1">Next day onward, your choice. Open every day.</p>
-                      </div>
-                      <div>
-                        <label htmlFor="delivery_time" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                        <TimeSelect id="delivery_time" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} minTime={allowedDelivery.minTime} maxTime={allowedDelivery.maxTime} />
-                        <p className="text-xs text-clay-muted mt-1">{STORE_HOURS_LABEL}.</p>
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label htmlFor="delivery_date" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery date *</label>
-                    <input id="delivery_date" required type="date" min={today} value={form.delivery_date} onChange={(e) => set('delivery_date', e.target.value)} className="clay-input" />
-                  </div>
-                  <div>
-                    <label htmlFor="delivery_time_only" className="block text-sm font-medium text-clay-ink2 mb-1">Delivery time *</label>
-                    <TimeSelect id="delivery_time_only" value={form.delivery_time} onChange={(v) => set('delivery_time', v)} date={form.delivery_date} today={today} nowTime={nowTime} />
-                    <p className="text-xs text-clay-muted mt-1">Store hours: {STORE_HOURS_LABEL}.</p>
-                  </div>
-                </>
-              )}
-
-              </>
-              )}
-
-              {!scheduleCheck.ok && (form.delivery_time || form.pickup_time) && (
-                <p className="text-clay-danger text-xs" role="alert">{scheduleCheck.error}</p>
-              )}
-            </div>
-          </ClayCard>
-
           {/* Notes */}
           <ClayCard className="p-6">
-            <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Additional Notes</h2>
+            <button type="button" onClick={() => setShowNotes((shown) => !shown)} aria-expanded={showNotes} className="text-sm font-semibold text-clay-skydeep">{showNotes ? 'Hide delivery notes' : 'Add delivery notes (optional)'}</button>
+            {showNotes && <div className="mt-4">
             <label htmlFor="order_notes" className="sr-only">Additional notes</label>
             <textarea id="order_notes" value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={3} className="clay-input" placeholder="Delivery instructions, landmarks, etc." />
+            </div>}
           </ClayCard>
 
           {/* Order Summary */}
-          <ClayCard className="p-6">
+          <ClayCard id="order-summary" className="p-6 scroll-mt-24">
             <h2 className="text-lg font-editorial font-semibold text-clay-ink2 mb-4">Order Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-clay-muted">Getting it by</span>
                 <span className="font-medium">{storePickup ? 'Store pickup' : 'Delivery'}</span>
               </div>
+              {deliveryDate && deliveryTime && <div className="flex justify-between gap-3"><span className="text-clay-muted">{storePickup ? 'Collect' : 'Deliver'}</span><span className="font-medium text-right">{deliveryDate} · {formatSlot(deliveryTime)}</span></div>}
+              {hasEmptyContainers && form.pickup_date && form.pickup_time && <div className="flex justify-between gap-3"><span className="text-clay-muted">Collect empties</span><span className="font-medium text-right">{form.pickup_date} · {formatSlot(form.pickup_time)}</span></div>}
+              {!storePickup && form.address && <div className="flex justify-between gap-3"><span className="text-clay-muted">To</span><span className="font-medium text-right">{form.address}, {form.barangay}</span></div>}
               <div className="flex justify-between">
                 <span className="text-clay-muted">{selectedProduct.name} x{form.quantity}</span>
                 <span className="font-medium">₱{refillTotal}</span>
@@ -952,7 +944,7 @@ function OrderForm({ queryProduct, availableProducts }) {
               {isRefill && (codePhase === 'fallback' || revisedReward?.requires_manual_approval) && rewardCount > 0 && (
                 <div className="flex justify-between text-clay-muted">
                   <span>Free refill requested ×{rewardCount}</span>
-                  <span>on delivery</span>
+                  <span>pending review</span>
                 </div>
               )}
               <div className="border-t border-sky-200 pt-2 mt-2 flex justify-between font-bold text-base">
@@ -993,6 +985,12 @@ function OrderForm({ queryProduct, availableProducts }) {
             )}
           </button>
         </form>
+      </div>
+      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 border-t border-sky-100 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden shadow-lg">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
+          <div className="text-sm"><span className="block text-clay-muted">Current total</span><strong className="text-clay-skydeep">{grandTotal == null ? 'Checking…' : `₱${grandTotal}`}</strong></div>
+          <a href="#order-summary" className="clay-btn-primary rounded-full px-5 py-3 font-semibold text-sm">Review order</a>
+        </div>
       </div>
     </Layout>
   );

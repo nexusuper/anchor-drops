@@ -17,17 +17,27 @@ globalThis.window = { localStorage: local, sessionStorage: session };
 
 const {
   readIdentity, writeIdentity, clearIdentity,
+  readLastOrder,
   readOrderPhone, writeOrderPhone, DRAFT_KEY,
 } = await import('../lib/client-storage.js');
 
 const IDENTITY_KEY = 'anchor-drops:identity';
 const DAY = 86_400_000;
 const IDENTITY = { customer_name: 'Juan Dela Cruz', phone: '09171234567', address: '123 Rizal St.' };
+const LAST_ORDER = { product_type: 'round5', quantity: 3, fulfillment: 'delivery' };
 
 // Round-trips, and the timestamp is an implementation detail the caller never sees.
 writeIdentity(IDENTITY);
 assert.deepEqual(readIdentity(), IDENTITY);
 assert.ok(JSON.parse(local.getItem(IDENTITY_KEY)).saved_at > 0);
+assert.equal(readLastOrder(), null);
+
+writeIdentity(IDENTITY, { ...LAST_ORDER, ...IDENTITY, delivery_date: '2026-11-17', payment_method: 'gcash' });
+assert.deepEqual(JSON.parse(local.getItem(IDENTITY_KEY)).lastOrder, LAST_ORDER);
+assert.deepEqual(readLastOrder(), LAST_ORDER);
+assert.deepEqual(readIdentity(), IDENTITY);
+writeIdentity(IDENTITY, { ...LAST_ORDER, quantity: 51 });
+assert.equal(readLastOrder(), null);
 
 // Fresh-enough blobs survive.
 local.setItem(IDENTITY_KEY, JSON.stringify({ ...IDENTITY, saved_at: Date.now() - 29 * DAY }));
@@ -35,7 +45,8 @@ assert.deepEqual(readIdentity(), IDENTITY);
 
 // Past the 30-day TTL it is gone, and the read also evicts it — a shared family
 // phone or a cafe machine must not pre-fill a stranger's name and home address.
-local.setItem(IDENTITY_KEY, JSON.stringify({ ...IDENTITY, saved_at: Date.now() - 31 * DAY }));
+local.setItem(IDENTITY_KEY, JSON.stringify({ ...IDENTITY, lastOrder: LAST_ORDER, saved_at: Date.now() - 31 * DAY }));
+assert.equal(readLastOrder(), null);
 assert.equal(readIdentity(), null);
 assert.equal(local.getItem(IDENTITY_KEY), null);
 
@@ -52,10 +63,11 @@ assert.equal(readIdentity(), null);
 assert.equal(readIdentity(), null); // nothing stored at all
 
 // clearIdentity drops the draft too.
-writeIdentity(IDENTITY);
+writeIdentity(IDENTITY, LAST_ORDER);
 session.setItem(DRAFT_KEY, JSON.stringify({ quantity: 3 }));
 clearIdentity();
 assert.equal(readIdentity(), null);
+assert.equal(readLastOrder(), null);
 assert.equal(session.getItem(DRAFT_KEY), null);
 
 // ...and the order phone. "Not you? Clear" on a shared device that left it

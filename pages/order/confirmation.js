@@ -240,7 +240,7 @@ export default function Confirmation() {
             {order.reward_requested > 0 && (
               <ClayCard variant="inset" className="p-4 text-center text-sm font-semibold text-clay-ink2">
                 <ClayIcon name="info" className="w-4 h-4 inline mr-1" />
-                Free refill requested ×{order.reward_requested} — we&apos;ll apply it when we confirm your delivery.
+                Free refill requested ×{order.reward_requested} — we&apos;ll review it when we confirm your order.
               </ClayCard>
             )}
             {unit === 'refill' && <p className="text-center text-xs text-clay-muted">

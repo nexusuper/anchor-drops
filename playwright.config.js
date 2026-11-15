@@ -5,6 +5,7 @@ export default defineConfig({
   timeout: 30_000,
   use: {
     baseURL: process.env.SMOKE_BASE_URL || 'https://www.anchordropscdo.com',
+    channel: process.env.SMOKE_BROWSER_CHANNEL || undefined,
     trace: 'retain-on-failure',
   },
 });
