@@ -47,6 +47,19 @@ test('storefront displays live prices and keeps vendo informational', async ({ p
   await expect(page.locator('a[href="/order?product=vendo_refill"]')).toHaveCount(0);
 });
 
+test('late-loaded catalog content becomes visible on home and order pages', async ({ page }) => {
+  await page.goto('/');
+  const homePrice = page.getByRole('heading', { name: bottle.name }).locator('..');
+  await homePrice.scrollIntoViewIfNeeded();
+  await expect(homePrice.getByText('₱11', { exact: true })).toBeVisible();
+  await expect(homePrice).toHaveCSS('opacity', '1');
+
+  await page.goto('/order?product=bottle_500');
+  const orderHeading = page.getByRole('heading', { name: 'Place Your Order.' });
+  await expect(orderHeading).toBeVisible();
+  await expect(orderHeading.locator('..')).toHaveCSS('opacity', '1');
+});
+
 test('bottle order lets the customer switch pickup to delivery', async ({ page }) => {
   await page.goto('/order?product=bottle_500');
   await expect(page.getByRole('radio', { name: 'Store pickup', exact: true })).toBeChecked();

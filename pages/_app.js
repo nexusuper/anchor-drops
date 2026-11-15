@@ -85,19 +85,32 @@ export default function App({ Component, pageProps }) {
 
   // Scroll-reveal: add .is-visible to .reveal elements as they enter the viewport
   useEffect(() => {
-    let obs;
-    const attach = () => {
-      obs = new IntersectionObserver(
-        (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add('is-visible'); }),
-        { threshold: 0.1 }
-      );
-      document.querySelectorAll('.reveal').forEach((el) => obs.observe(el));
+    const selector = '.reveal:not(.is-visible)';
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0.1 });
+    const visit = (node, callback) => {
+      if (!(node instanceof Element)) return;
+      if (node.matches(selector)) callback(node);
+      node.querySelectorAll(selector).forEach(callback);
     };
-    attach();
-    const onRoute = () => { obs?.disconnect(); setTimeout(attach, 80); };
-    router.events.on('routeChangeComplete', onRoute);
-    return () => { obs?.disconnect(); router.events.off('routeChangeComplete', onRoute); };
-  }, [router.events]);
+    const mutations = new MutationObserver((records) => {
+      for (const { addedNodes, removedNodes } of records) {
+        removedNodes.forEach((node) => visit(node, (el) => observer.unobserve(el)));
+        addedNodes.forEach((node) => visit(node, (el) => observer.observe(el)));
+      }
+    });
+    visit(document.body, (el) => observer.observe(el));
+    mutations.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      mutations.disconnect();
+      observer.disconnect();
+    };
+  }, []);
 
 
   return (
