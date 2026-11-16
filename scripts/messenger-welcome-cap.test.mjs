@@ -99,6 +99,9 @@ for (const p of ['MENU_PRICES', 'MENU_ORDER', 'MENU_HUMAN']) {
 }
 out = await deliver({ sender: { id: 'A' }, message: { text: '💰 Prices', quick_reply: { payload: 'MENU_PRICES' } } });
 assert.equal(out.length, 1); assert.match(out[0].message.text, /Our prices/); assertMenu(out);
+for (const price of ['Self-service vendo: ₱20', 'Walk-in refill: ₱25', 'Delivery refill: ₱30', 'New container with first fill: ₱180', 'Slim jug with first fill: ₱200', '500 mL bottle: ₱9', 'pack of 20: ₱180', '1 L bottle: ₱15', 'pack of 12: ₱180']) {
+  assert.ok(out[0].message.text.includes(price), price);
+}
 
 // Unknown order refs still get a reply after the cap.
 out = await text('A', 'my order is 00000000-0000-0000-0000-000000000000');

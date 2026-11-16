@@ -279,10 +279,15 @@ function inHandoff(senderPsid) {
 }
 
 function priceList() {
-  return PRODUCTS
-    .filter((p) => p.id !== 'slim5')
-    .map((p) => `• ${p.name} — ₱${p.refill} refill (₱${p.refill + p.container} with brand new container)`)
-    .join('\n');
+  const pickup = PRODUCTS.find((p) => p.id === 'round5_pickup');
+  const delivery = PRODUCTS.find((p) => p.id === 'round5');
+  return `• Self-service vendo: ₱20/full gallon refill
+• Walk-in refill: ₱${pickup.refill}
+• Delivery refill: ₱${delivery.refill}
+• New container with first fill: ₱${delivery.refill + delivery.container}
+• Slim jug with first fill: ₱200
+• 500 mL bottle: ₱9 | pack of 20: ₱180
+• 1 L bottle: ₱15 | pack of 12: ₱180`;
 }
 
 async function handleMessage(senderPsid, messageText) {
