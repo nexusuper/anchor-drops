@@ -76,7 +76,7 @@ export default function SettingsTab({ savedPassword }) {
       {bands && (
         <form onSubmit={saveBands} className="clay-raised rounded-2xl p-4 space-y-3">
           <h3 className="font-display font-bold text-clay-ink">Bottled-water delivery rates</h3>
-          <p className="text-xs text-clay-ink/70">Bugo is free. Enter maximum distances in ascending order for the rest of Cagayan de Oro.</p>
+          <p className="text-xs text-clay-ink/70">Bugo is free. Enter maximum distances in ascending order. For Cagayan de Oro deliveries outside these rates, confirm the fee with the customer.</p>
           {bands.map((band, index) => (
             <div key={index} className="flex gap-2 items-end">
               {[['max_km', 'Up to (km)'], ['fee', 'Fee (₱)']].map(([key, label]) => (

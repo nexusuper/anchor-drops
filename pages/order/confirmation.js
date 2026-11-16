@@ -51,7 +51,7 @@ export default function Confirmation() {
         else {
           setOrder(d);
           // Track purchase event once
-          if (!trackedRef.current && d.total_amount) {
+          if (!trackedRef.current && d.total_amount && !d.delivery_fee_pending) {
             trackPurchase(d.total_amount, 'PHP');
             trackedRef.current = true;
           }
@@ -218,14 +218,14 @@ export default function Confirmation() {
                     <span className="font-medium">{order.delivery_date} {order.delivery_time}</span>
                   </div>
                 )}
-                {!isPickup && order.delivery_fee != null && (
+                {!isPickup && (order.delivery_fee_pending || order.delivery_fee != null) && (
                   <div className="flex justify-between">
                     <span className="text-clay-muted">Delivery fee</span>
-                    <span className="font-medium">{Number(order.delivery_fee) ? `₱${order.delivery_fee}` : 'Free'}</span>
+                    <span className="font-medium">{order.delivery_fee_pending ? 'To be confirmed' : Number(order.delivery_fee) ? `₱${order.delivery_fee}` : 'Free'}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-sky-50 pt-2">
-                  <span className="text-gray-700 font-bold">Total</span>
+                  <span className="text-gray-700 font-bold">{order.delivery_fee_pending ? 'Subtotal before delivery' : 'Total'}</span>
                   <span className="text-sky-600 font-bold">₱{order.total_amount}</span>
                 </div>
               </div>
@@ -256,7 +256,7 @@ export default function Confirmation() {
 
             <ClayCard variant="inset" className="p-5 text-center text-sm text-clay-skydeep">
               {order.phone && !isPickup && (
-                <><ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong> before delivery.<br /></>
+                <><ClayIcon name="phone" className="w-4 h-4 inline mr-1" /> We will call you at <strong>{order.phone}</strong>{order.delivery_fee_pending ? ' to confirm your delivery fee' : ''} before delivery.<br /></>
               )}
               {order.delivery_date ? (
                 <>{isPickup ? 'Scheduled store pickup' : 'Scheduled delivery'} at <strong>{order.delivery_date}{order.delivery_time ? ` · ${order.delivery_time}` : ''}</strong>.</>

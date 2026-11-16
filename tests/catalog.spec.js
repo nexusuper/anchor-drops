@@ -157,6 +157,65 @@ test('bottle order lets the customer switch pickup to delivery', async ({ page }
   await expect(page.getByText(/Do you have empty containers/i)).toHaveCount(0);
 });
 
+test('bottle delivery with a pending fee shows a subtotal and accepts cash only', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.setItem('anchor-drops:identity', JSON.stringify({
+    saved_at: Date.now(), customer_name: 'Sample Customer', phone: '09171234567',
+    address: 'Sample Street', barangay: 'Iponan', lat: 8.497, lng: 124.589,
+    lastOrder: { product_type: 'bottle_500', quantity: 1, fulfillment: 'pickup' },
+  })));
+  const quote = {
+    lines: [{ sku: bottle.id, refill_price: 11, container_price: 0 }],
+    subtotal: 11, delivery_fee: 0, delivery_fee_pending: false,
+  };
+  let feeBecamePending = false;
+  await page.route('**/api/order-quote', (route) => route.fulfill({ json: { ...quote, delivery_fee_pending: feeBecamePending } }));
+  let submitted;
+  await page.route('**/api/orders', (route) => {
+    const order = route.request().postDataJSON();
+    if (!order.expected_delivery_fee_pending) {
+      feeBecamePending = true;
+      return route.fulfill({ status: 409, json: {
+        error: 'The delivery fee changed. Review the updated quote before placing your order.',
+        quote: { ...quote, delivery_fee_pending: true },
+      } });
+    }
+    submitted = order;
+    return route.fulfill({ status: 201, json: { id: submitted.client_order_id } });
+  });
+  await page.route('**/api/orders/*', (route) => route.fulfill({ json: {
+    status: 'pending', product_type: bottle.id, fulfillment: 'delivery', quantity: 1,
+    phone: '09171234567', payment_method: 'cod', delivery_fee: 0, delivery_fee_pending: true, total_amount: 11,
+  } }));
+
+  await page.goto('/order?product=bottle_500');
+  const gcash = page.getByRole('radio', { name: 'GCash / Bank Transfer' });
+  await gcash.check();
+  await expect(page.getByText('Amount to send')).toBeVisible();
+  await page.getByLabel('Reference Number (after payment)').fill('old-reference');
+  await page.getByRole('radio', { name: 'Delivery', exact: true }).check();
+  await page.getByRole('button', { name: 'Tomorrow' }).click();
+  await page.getByLabel('Delivery time').selectOption('08:00');
+  await page.getByRole('button', { name: 'Place Order →' }).click();
+  await expect(gcash).toBeDisabled();
+  await expect(page.getByRole('radio', { name: 'Cash on Delivery' })).toBeChecked();
+  await expect(page.getByText('Amount to send')).toHaveCount(0);
+  const summary = page.locator('#order-summary');
+  await expect(summary.getByText('To be confirmed')).toBeVisible();
+  await expect(summary.getByText('Free', { exact: true })).toHaveCount(0);
+  await expect(summary.getByText('Subtotal before delivery')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Review order' }).locator('..').getByText('Subtotal before delivery')).toBeVisible();
+  await page.getByRole('button', { name: 'Confirm Updated Quote →' }).click();
+  await expect(page).toHaveURL(/\/order\/confirmation/);
+  expect(submitted).toMatchObject({
+    fulfillment: 'delivery', payment_method: 'cod', reference_number: '',
+    expected_final_total: 11, expected_delivery_fee_pending: true,
+  });
+  await expect(page.getByText('To be confirmed')).toBeVisible();
+  await expect(page.getByText('Subtotal before delivery')).toBeVisible();
+  await expect(page.getByText('Free', { exact: true })).toHaveCount(0);
+});
+
 test('checkout asks the customer to confirm a changed bottle price', async ({ page }) => {
   const quote = (price) => ({
     lines: [{ sku: bottle.id, refill_price: price, container_price: 0 }],

@@ -45,6 +45,7 @@ const OrderSchema = z.object({
   notes: z.string().max(1000).optional().nullable(),
   total_amount: z.number().finite().min(0),
   expected_final_total: z.number().finite().min(0),
+  expected_delivery_fee_pending: z.boolean().default(false),
   delivery_fee: z.number().finite().min(0),
   reward_requested: z.coerce.number().int().min(0).max(50).optional().default(0),
   reward_code: z.string().max(10).optional().nullable(),
@@ -159,6 +160,7 @@ export default async function handler(req, res) {
     const {
       customer_name, phone, address, barangay,
       product_type, quantity, fulfillment, total_amount, expected_final_total, delivery_fee,
+      expected_delivery_fee_pending,
       need_container, container_quantity,
       payment_method, gcash_number, reference_number, payment_screenshot,
       notes, reward_requested, reward_code,
@@ -248,8 +250,15 @@ export default async function handler(req, res) {
     if (quoteError?.code === '22023') return res.status(400).json({ error: quoteError.message, quoteUnavailable: true });
     if (quoteError) throw quoteError;
     const expectedTotal = Number((Number(quote.subtotal) + Number(quote.delivery_fee)).toFixed(2));
+    const deliveryFeePending = quote.delivery_fee_pending === true;
+    if (expected_delivery_fee_pending !== deliveryFeePending) {
+      return res.status(409).json({ error: 'The delivery fee changed. Review the updated quote before placing your order.', quote });
+    }
     if (total_amount !== expectedTotal || delivery_fee !== Number(quote.delivery_fee)) {
       return res.status(409).json({ error: 'The price changed. Review the new total before placing your order.', quote });
+    }
+    if (deliveryFeePending && payment_method !== 'cod') {
+      return res.status(400).json({ error: 'Select cash on delivery when the delivery fee is pending.' });
     }
 
     const normPhone = normalizePhone(phone);
@@ -424,6 +433,7 @@ export default async function handler(req, res) {
       p_delivery_date: deliveryDate,
       p_delivery_time: deliveryTime,
       p_delivery_fee: Number(quote.delivery_fee),
+      expected_delivery_fee_pending,
       p_pickup_date: hasEmptyContainers ? pickupDate : null,
       p_pickup_time: hasEmptyContainers ? pickupTime : null,
       p_lat: storePickup ? null : (lat ?? null),
@@ -460,7 +470,7 @@ export default async function handler(req, res) {
         return res.status(409).json({
           error: revisedReward
             ? 'The reward discount changed. Review the new total before placing your order.'
-            : 'The price changed. Review the new total before placing your order.',
+            : 'The price changed. Review the updated quote before placing your order.',
           quote: updated,
           revised_reward: revisedReward,
         });

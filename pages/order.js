@@ -260,6 +260,8 @@ function OrderForm({ queryProduct, availableProducts }) {
   const canQuote = form.quantity >= minQty && (!isBottle || storePickup || (form.lat != null && form.lng != null));
   const currentQuote = quoteResult?.key === quoteKey ? quoteResult : null;
   const quote = currentQuote?.quote;
+  const deliveryFeePending = quote?.delivery_fee_pending === true;
+  const paymentMethod = deliveryFeePending ? 'cod' : form.payment_method;
   const voucherValue = Number(quote?.voucher_value ?? VOUCHER_VALUE);
 
   useEffect(() => {
@@ -465,7 +467,7 @@ function OrderForm({ queryProduct, availableProducts }) {
       focus('barangay');
       return;
     }
-    if (form.payment_method === 'gcash' && form.gcash_number.trim() && !isPhMobile(form.gcash_number)) {
+    if (paymentMethod === 'gcash' && form.gcash_number.trim() && !isPhMobile(form.gcash_number)) {
       setError('Please enter a valid GCash mobile number (09XX-XXX-XXXX).');
       focus('gcash_number');
       return;
@@ -490,6 +492,8 @@ function OrderForm({ queryProduct, availableProducts }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          payment_method: paymentMethod,
+          ...(deliveryFeePending && { gcash_number: '', reference_number: '', payment_screenshot: '' }),
           product_type: selectedProduct.id,
           fulfillment,
           // The server stamps the store's address for a pickup; sending a
@@ -502,6 +506,7 @@ function OrderForm({ queryProduct, availableProducts }) {
           container_size: selectedProduct.size,
           total_amount: baseTotal,
           expected_final_total: grandTotal,
+          expected_delivery_fee_pending: deliveryFeePending,
           delivery_fee: Number(quote.delivery_fee),
           need_container: needContainer,
           container_quantity: needContainer ? form.container_quantity : 0,
@@ -532,7 +537,7 @@ function OrderForm({ queryProduct, availableProducts }) {
       // in lib/client-storage.js. The order id stays in the URL so the
       // confirmation page remains shareable and bookmarkable.
       writeOrderPhone(form.phone);
-      const screenshotFlag = form.payment_screenshot && data.screenshot_saved === false ? '&screenshot=0' : '';
+      const screenshotFlag = !deliveryFeePending && form.payment_screenshot && data.screenshot_saved === false ? '&screenshot=0' : '';
       router.push(`/order/confirmation?id=${encodeURIComponent(data.id)}${screenshotFlag}`);
     } catch (err) {
       setError(err.message);
@@ -691,7 +696,7 @@ function OrderForm({ queryProduct, availableProducts }) {
                   {isBottle ? 'Pin your delivery location (required)' : 'Pin your location on the map (optional)'}
                 </p>
                 <p className="text-xs text-clay-muted mb-2">
-                  {isBottle ? 'Your pin determines availability and the delivery fee.' : 'Helps our driver find your delivery address.'}
+                  {isBottle ? 'Pin an address in Cagayan de Oro to check delivery.' : 'Helps our driver find your delivery address.'}
                 </p>
                 <LocationPicker
                   value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
@@ -832,14 +837,15 @@ function OrderForm({ queryProduct, availableProducts }) {
                 { id: 'cod', label: storePickup ? 'Cash at the store' : 'Cash on Delivery' },
                 { id: 'gcash', label: 'GCash / Bank Transfer' },
               ].map((m) => (
-                <label key={m.id} className={`flex items-center gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${form.payment_method === m.id ? 'clay-tile-selected' : ''}`}>
-                  <input type="radio" name="payment_method" value={m.id} checked={form.payment_method === m.id} onChange={() => set('payment_method', m.id)} className="accent-clay-sky" />
+                <label key={m.id} className={`flex items-center gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${paymentMethod === m.id ? 'clay-tile-selected' : ''}`}>
+                  <input type="radio" name="payment_method" value={m.id} checked={paymentMethod === m.id} disabled={deliveryFeePending && m.id === 'gcash'} onChange={() => set('payment_method', m.id)} className="accent-clay-sky" />
                   <span className="font-semibold text-clay-ink">{m.label}</span>
                 </label>
               ))}
             </div>
 
-            {form.payment_method === 'gcash' && quote && (
+            {deliveryFeePending && <p className="mt-3 text-sm text-clay-muted">Cash on delivery for this order. We’ll confirm the delivery fee before delivery.</p>}
+            {paymentMethod === 'gcash' && quote && (
               <div className="mt-4 space-y-3 p-4 clay-inset rounded-xl">
                 <p className="text-sm text-clay-ink2">GCash: <strong>{GCASH_NUMBER_DISPLAY}</strong> (Anchor Drops)</p>
                 <p className="text-sm text-clay-ink2">Amount to send <strong>₱{grandTotal}</strong></p>
@@ -932,7 +938,7 @@ function OrderForm({ queryProduct, availableProducts }) {
               {!storePickup && quote && (
                 <div className="flex justify-between">
                   <span className="text-clay-muted">Delivery fee</span>
-                  <span className="font-medium">{Number(quote.delivery_fee) ? `₱${quote.delivery_fee}` : 'Free'}</span>
+                  <span className="font-medium">{deliveryFeePending ? 'To be confirmed' : Number(quote.delivery_fee) ? `₱${quote.delivery_fee}` : 'Free'}</span>
                 </div>
               )}
               {voucherDiscount > 0 && (
@@ -948,7 +954,7 @@ function OrderForm({ queryProduct, availableProducts }) {
                 </div>
               )}
               <div className="border-t border-sky-200 pt-2 mt-2 flex justify-between font-bold text-base">
-                <span className="text-clay-ink">Total</span>
+                <span className="text-clay-ink">{deliveryFeePending ? 'Subtotal before delivery' : 'Total'}</span>
                 <span className="text-clay-skydeep">{grandTotal == null ? '—' : `₱${grandTotal}`}</span>
               </div>
               {!canQuote && isBottle && !storePickup && <p role="status">Add a delivery pin to see the total.</p>}
@@ -981,14 +987,14 @@ function OrderForm({ queryProduct, availableProducts }) {
                 Placing Order…
               </>
             ) : (
-              currentQuote?.changed ? 'Confirm New Total →' : 'Place Order →'
+              currentQuote?.changed ? (deliveryFeePending ? 'Confirm Updated Quote →' : 'Confirm New Total →') : 'Place Order →'
             )}
           </button>
         </form>
       </div>
       <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 border-t border-sky-100 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden shadow-lg">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-          <div className="text-sm"><span className="block text-clay-muted">Current total</span><strong className="text-clay-skydeep">{grandTotal == null ? 'Checking…' : `₱${grandTotal}`}</strong></div>
+          <div className="text-sm"><span className="block text-clay-muted">{deliveryFeePending ? 'Subtotal before delivery' : 'Current total'}</span><strong className="text-clay-skydeep">{grandTotal == null ? 'Checking…' : `₱${grandTotal}`}</strong></div>
           <a href="#order-summary" className="clay-btn-primary rounded-full px-5 py-3 font-semibold text-sm">Review order</a>
         </div>
       </div>

@@ -4,6 +4,7 @@ import OpsShell from '@/components/admin/OpsShell';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
+import { useOpsSession } from '@/lib/useOpsSession';
 import { sizeLabel } from '@/lib/products';
 
 // Web port of app/(app)/orders/[id].tsx — status changes, payment-verified
@@ -60,6 +61,7 @@ function Row({ label, value }) {
 export default function OpsOrderDetailPage() {
   const router = useRouter();
   const { id } = router.query;
+  const { role } = useOpsSession();
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,6 +73,26 @@ export default function OpsOrderDetailPage() {
   const [messengerBusy, setMessengerBusy] = useState(false);
   const [screenshotUrl, setScreenshotUrl] = useState(null);
   const [screenshotError, setScreenshotError] = useState(false);
+  const [deliveryFeeInput, setDeliveryFeeInput] = useState('');
+  const [feeBusy, setFeeBusy] = useState(false);
+
+  async function confirmDeliveryFee(e) {
+    e.preventDefault();
+    const fee = deliveryFeeInput.trim();
+    if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(fee)) return;
+    setFeeBusy(true);
+    try {
+      const { error: feeError } = await getSupabaseBrowser().rpc('confirm_bottle_delivery_fee', {
+        p_order_id: id, p_delivery_fee: Number(fee),
+      });
+      if (feeError) throw feeError;
+      await loadOrder();
+    } catch (err) {
+      alert('Could not confirm delivery fee: ' + err.message);
+    } finally {
+      setFeeBusy(false);
+    }
+  }
 
   async function loadOrder() {
     if (!id) return;
@@ -220,13 +242,27 @@ export default function OpsOrderDetailPage() {
             <Row label="Barangay" value={order.barangay} />
           </ClayCard>
 
+          {order.delivery_fee_pending && role === 'owner' && (
+            <ClayCard className="p-4">
+              <h2 className="font-display font-bold text-clay-ink mb-2">Confirm delivery fee</h2>
+              <p className="text-sm text-clay-muted mb-3">Agree on fee with customer before delivery.</p>
+              <form onSubmit={confirmDeliveryFee} className="flex flex-wrap items-end gap-3">
+                <label className="text-sm text-clay-ink">Delivery fee (₱)
+                  <input type="text" inputMode="decimal" value={deliveryFeeInput} onChange={(e) => setDeliveryFeeInput(e.target.value)} className="clay-inset block rounded-xl p-3 mt-1" required />
+                </label>
+                <ClayButton type="submit" disabled={feeBusy || !/^\d{1,8}(?:\.\d{1,2})?$/.test(deliveryFeeInput.trim())} loading={feeBusy}>Confirm fee</ClayButton>
+              </form>
+            </ClayCard>
+          )}
+
           <ClayCard className="p-4">
             <h2 className="font-display font-bold text-clay-ink mb-2">Order items</h2>
             <Row label="Product" value={order.product_type} />
             <Row label="Container size" value={sizeLabel(order.container_size)} />
             <Row label="Quantity" value={order.quantity} />
             <Row label="Needs container(s)" value={order.need_container ? `Yes (${order.container_quantity})` : 'No'} />
-            <Row label="Total" value={`₱${Number(order.total_amount ?? 0).toFixed(2)}`} />
+            <Row label={order.delivery_fee_pending ? 'Subtotal before delivery fee' : 'Total'} value={`₱${Number(order.total_amount ?? 0).toFixed(2)}`} />
+            {order.delivery_fee_pending && <Row label="Delivery fee" value="Owner confirmation pending" />}
             <Row label="Sale channel" value={order.sale_channel} />
             {order.voucher_count > 0 && <Row label="Loyalty vouchers redeemed" value={order.voucher_count} />}
           </ClayCard>

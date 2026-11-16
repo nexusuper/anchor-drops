@@ -116,7 +116,7 @@ function StopBody({ orderId }) {
     );
   }
 
-  const deliverable = order.status === 'confirmed' || order.status === 'out_for_delivery';
+  const deliverable = (order.status === 'confirmed' || order.status === 'out_for_delivery') && !order.delivery_fee_pending;
 
   // Best-effort GPS fix. Never blocks the delivery — the app does the same
   // (getGpsFix swallows every failure and returns nulls).
@@ -248,7 +248,7 @@ function StopBody({ orderId }) {
 
       <div className="grid grid-cols-2 gap-2">
         <ClayCard variant="raisedSm" className="p-4">
-          <p className="text-xs text-clay-muted">Amount Due</p>
+          <p className="text-xs text-clay-muted">{order.delivery_fee_pending ? 'Subtotal before delivery fee' : 'Amount Due'}</p>
           <p className="font-display font-bold text-lg text-clay-ink">{peso(order.total_amount)}</p>
         </ClayCard>
         <ClayCard variant="raisedSm" className="p-4">
@@ -260,7 +260,12 @@ function StopBody({ orderId }) {
         </ClayCard>
       </div>
 
-      {!deliverable && (
+      {order.delivery_fee_pending && (
+        <p className="clay-raised-sm rounded-2xl p-4 text-sm text-clay-danger bg-clay-danger-bg">
+          Owner must confirm delivery fee before this order can be completed.
+        </p>
+      )}
+      {!deliverable && !order.delivery_fee_pending && (
         <p className="clay-raised-sm rounded-2xl p-4 text-sm text-clay-danger bg-clay-danger-bg">
           This order is <strong>{String(order.status).replace(/_/g, ' ')}</strong>, not on the route. It cannot be
           completed.

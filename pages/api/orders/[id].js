@@ -68,6 +68,7 @@ export default async function handler(req, res) {
           product_type: order.product_type, container_size: order.container_size,
           ...display,
           quantity: order.quantity, total_amount: order.total_amount,
+          delivery_fee_pending: order.delivery_fee_pending,
           customer_name: (order.customer_name || '').trim().split(/\s+/)[0] || order.customer_name,
           voucher_count: order.voucher_count, voucher_discount: order.voucher_discount,
           reward_requested: order.reward_requested,
@@ -92,7 +93,7 @@ export default async function handler(req, res) {
         pickup_date: order.pickup_date, pickup_time: order.pickup_time,
         delivery_time: order.delivery_time,
         payment_verified: order.payment_verified,
-        delivery_fee: order.delivery_fee,
+        delivery_fee: order.delivery_fee, delivery_fee_pending: order.delivery_fee_pending,
       });
     }
 
