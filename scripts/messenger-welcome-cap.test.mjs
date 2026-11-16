@@ -89,8 +89,9 @@ assert.equal(out.length, 1); assert.ok(isWelcome(out[0])); assertMenu(out);
 assert.equal((await text('A', 'hello?')).length, 0);
 assert.equal((await text('A', 'still there')).length, 0);
 
-// Get Started counts toward the same cap.
-assert.equal((await tap('A', 'GET_STARTED')).length, 0);
+// Explicit Get Started taps always answer, even after automatic welcomes are capped.
+out = await tap('A', 'GET_STARTED');
+assert.equal(out.length, 1); assert.ok(isWelcome(out[0])); assertMenu(out);
 
 // Button taps still answer after the cap.
 for (const p of ['MENU_PRICES', 'MENU_ORDER', 'MENU_HUMAN']) {

@@ -177,7 +177,13 @@ function phoneMatchesOrder(phone, orderPhone) {
 // Bind a customer's Messenger PSID to an order (and their customer record).
 // Returns true if a binding happened. Never throws to the caller.
 async function bindOrder(senderPsid, order) {
-  await getSupabase().from('orders').update({ messenger_psid: senderPsid }).eq('id', order.id);
+  const { data: linked, error } = await getSupabase().from('orders')
+    .update({ messenger_psid: senderPsid }).eq('id', order.id)
+    .eq('phone', order.phone).is('messenger_psid', null)
+    .not('status', 'in', '(delivered,cancelled)')
+    .gt('created_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+    .select('id').maybeSingle();
+  if (error || !linked) return false;
   if (order.customer_id) {
     await getSupabase().from('customers').update({ messenger_psid: senderPsid }).eq('id', order.customer_id);
   }
@@ -185,6 +191,7 @@ async function bindOrder(senderPsid, order) {
   // after the DB write already committed. Status is deliberately not echoed here —
   // it would confirm a guessed order number to whoever guessed it.
   await sendReply(senderPsid, `Got it — your order is linked.`);
+  return true;
 }
 
 // Look up ref, and either bind immediately (UUID — 128 bits, not guessable) or
@@ -206,14 +213,12 @@ async function requestOrConfirmLink(senderPsid, ref, phoneInSameMessage) {
   if (!eligible) return 'not_found';
 
   if (ref.column === 'id') {
-    await bindOrder(senderPsid, order);
-    return 'linked';
+    return await bindOrder(senderPsid, order) ? 'linked' : 'not_found';
   }
 
   if (phoneMatchesOrder(phoneInSameMessage, order.phone)) {
     pendingLinks.delete(senderPsid);
-    await bindOrder(senderPsid, order);
-    return 'linked';
+    return await bindOrder(senderPsid, order) ? 'linked' : 'not_found';
   }
 
   pendingLinks.set(senderPsid, { order, expiresAt: Date.now() + PENDING_TTL_MS });
@@ -351,6 +356,12 @@ ${priceList()}
       );
       return;
     case 'GET_STARTED':
+      humanHandoff.delete(senderPsid);
+      await sendButtons(senderPsid,
+        `👋 Welcome to Anchor Drops 💧\n\nPurified water delivered to your door.\nWhat can I help you with?`,
+        WELCOME_BUTTONS
+      );
+      return;
     default:
       humanHandoff.delete(senderPsid);
       await sendWelcome(senderPsid);
