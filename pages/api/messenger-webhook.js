@@ -296,6 +296,11 @@ function priceList() {
 }
 
 async function handleMessage(senderPsid, messageText) {
+  // Some Messenger clients send Get Started as text instead of a postback.
+  if (messageText.trim().toLowerCase() === 'get started') {
+    await handlePostback(senderPsid, 'GET_STARTED');
+    return;
+  }
   const pending = pendingLinks.get(senderPsid);
   if (pending && pending.expiresAt > Date.now()) {
     const phone = extractPhone(messageText);

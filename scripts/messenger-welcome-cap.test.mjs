@@ -92,6 +92,8 @@ assert.equal((await text('A', 'still there')).length, 0);
 // Explicit Get Started taps always answer, even after automatic welcomes are capped.
 out = await tap('A', 'GET_STARTED');
 assert.equal(out.length, 1); assert.ok(isWelcome(out[0])); assertMenu(out);
+out = await text('A', 'Get started');
+assert.equal(out.length, 1); assert.ok(isWelcome(out[0])); assertMenu(out);
 
 // Button taps still answer after the cap.
 for (const p of ['MENU_PRICES', 'MENU_ORDER', 'MENU_HUMAN']) {
