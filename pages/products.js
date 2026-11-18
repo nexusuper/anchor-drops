@@ -3,7 +3,8 @@ import PurifyProcess from '@/components/PurifyProcess';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
-import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
+import Image from 'next/image';
+import { productImage, productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
 
 const payments = [
   { icon: 'cash', name: 'Cash on Delivery', desc: 'Pay when your water arrives.' },
@@ -29,6 +30,9 @@ export default function Products() {
           {catalog?.products?.map((p) => (
             <ClayCard key={p.id} className="p-7 flex flex-col">
               {p.tag && <span className="self-center text-xs font-extrabold text-white rounded-full px-4 py-1.5 mb-4 clay-btn-primary">{p.tag}</span>}
+              {productImage(p) && <div className="clay-inset rounded-2xl h-44 p-3 mb-5 grid place-items-center overflow-hidden">
+                <Image src={productImage(p)} alt="" width={220} height={152} data-product-image={p.id} style={{ width: '100%', height: 152, objectFit: 'contain' }} />
+              </div>}
               <h2 className="text-xl font-editorial font-semibold text-clay-ink text-center mb-1">{p.name}</h2>
               <p className="text-clay-muted text-sm text-center mb-6 font-semibold">{p.description}</p>
               <div className="space-y-3 mb-6">

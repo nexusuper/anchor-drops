@@ -43,7 +43,9 @@ test('storefront displays live prices and keeps vendo informational', async ({ p
   await page.goto('/products');
   await expect(page.getByRole('heading', { name: bottle.name })).toBeVisible();
   await expect(page.getByText('₱11', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-product-image="bottle_500"]')).toBeVisible();
   await expect(page.getByRole('heading', { name: vendo.name })).toBeVisible();
+  await expect(page.locator('[data-product-image="vendo_refill"]')).toBeVisible();
   await expect(page.locator('a[href="/order?product=vendo_refill"]')).toHaveCount(0);
 });
 
@@ -55,6 +57,7 @@ test('late-loaded catalog content becomes visible on home and order pages', asyn
   await expect(homePrice).toHaveCSS('opacity', '1');
 
   await page.goto('/order?product=bottle_500');
+  await expect(page.locator('[data-product-image="bottle_500"]')).toBeVisible();
   const orderHeading = page.getByRole('heading', { name: 'Place Your Order.' });
   await expect(orderHeading).toBeVisible();
   await expect(orderHeading.locator('..')).toHaveCSS('opacity', '1');
@@ -192,6 +195,9 @@ test('bottle delivery with a pending fee shows a subtotal and accepts cash only'
   const gcash = page.getByRole('radio', { name: 'GCash / Bank Transfer' });
   await gcash.check();
   await expect(page.getByText('Amount to send')).toBeVisible();
+  await page.getByText('Attach payment proof (optional)').click();
+  await page.getByLabel('Payment screenshot').setInputFiles('public/products/bottle-500ml.webp');
+  await expect(page.getByRole('img', { name: 'Payment screenshot' })).toBeVisible();
   await page.getByLabel('Reference Number (after payment)').fill('old-reference');
   await page.getByRole('radio', { name: 'Delivery', exact: true }).check();
   await page.getByRole('button', { name: 'Tomorrow' }).click();

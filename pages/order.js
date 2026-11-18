@@ -2,12 +2,13 @@ import Layout from '@/components/Layout';
 import { MIN_DELIVERY_QTY, DELIVERY_MIN_MESSAGE, normalizePhonePH } from '@/lib/order-guard';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
+import NextImage from 'next/image';
 import ClayCard from '@/components/ui/ClayCard';
 import ClayIcon from '@/components/ui/ClayIcon';
 import LocationPicker from '@/components/order/LocationPicker';
 import { maxRedeemable, VOUCHER_VALUE, normalizePhone } from '@/lib/loyalty';
 import { BUSINESS_PHONE_DISPLAY, BUSINESS_PHONE_TEL, GCASH_NUMBER_DISPLAY, STORE_ADDRESS_DISPLAY } from '@/lib/products';
-import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
+import { productImage, productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
 import {
   computeAutomaticDelivery, validateSchedule, manilaToday, manilaNowTime,
   timeSlots, STORE_HOURS_LABEL, addDays,
@@ -569,12 +570,13 @@ function OrderForm({ queryProduct, availableProducts }) {
                 <label className="block text-sm font-medium text-clay-ink2 mb-2">Product *</label>
                 <div className="grid grid-cols-1 gap-2">
                   {availableProducts.map((p) => (
-                    <label key={p.id} className={`flex items-center justify-between rounded-2xl px-4 py-3 cursor-pointer clay-tile ${selectedProduct.id === p.id ? 'clay-tile-selected' : ''}`}>
+                    <label key={p.id} className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 cursor-pointer clay-tile ${selectedProduct.id === p.id ? 'clay-tile-selected' : ''}`}>
                       <div className="flex items-center gap-3">
                         <input type="radio" name="product_type" value={p.id} checked={selectedProduct.id === p.id} onChange={() => selectFulfillment(p, p.kind === 'bottle' ? 'pickup' : p.fulfillment)} className="accent-clay-sky" />
+                        {productImage(p) && <NextImage src={productImage(p)} alt="" width={56} height={56} data-product-image={p.id} className="w-14 h-14 object-contain shrink-0" />}
                         <span className="font-semibold text-clay-ink">{p.name}</span>
                       </div>
-                      <span className="font-editorial text-clay-skydeep font-bold">₱{selectedProduct.id === p.id ? quotedProduct?.refill_price ?? p.refill : p.refill}/{productUnit(p)}</span>
+                      <span className="font-editorial text-clay-skydeep font-bold text-right shrink-0">₱{selectedProduct.id === p.id ? quotedProduct?.refill_price ?? p.refill : p.refill}/{productUnit(p)}</span>
                     </label>
                   ))}
                 </div>

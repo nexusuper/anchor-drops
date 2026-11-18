@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Layout from '@/components/Layout';
+import Image from 'next/image';
 import AnimatedHero from '@/components/AnimatedHero';
 import PurifyProcess from '@/components/PurifyProcess';
 import WaterBackground from '@/components/water/WaterBackground';
@@ -7,7 +8,7 @@ import ClayCard from '@/components/ui/ClayCard';
 import ClayButton from '@/components/ui/ClayButton';
 import ClayIcon from '@/components/ui/ClayIcon';
 import { FB_PAGE_ID } from '@/pages/_app';
-import { productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
+import { productImage, productUnit, useStorefrontCatalog } from '@/lib/storefront-catalog';
 import { readLastOrder } from '@/lib/client-storage';
 
 const features = [
@@ -27,17 +28,6 @@ const features = [
     desc: 'Gallon refill orders earn rewards automatically.',
   },
 ];
-
-function Jug() {
-  return (
-    <svg className="mx-auto" width="80" height="100" viewBox="0 0 60 78" aria-hidden="true">
-      <rect x="20" y="2" width="20" height="8" rx="2" fill="#7dd3fc" />
-      <path d="M12 16 Q12 12 18 12 H42 Q48 12 48 16 V70 Q48 76 42 76 H18 Q12 76 12 70 Z" fill="#bae6fd" stroke="#38bdf8" strokeWidth="2" />
-      <rect x="18" y="30" width="24" height="34" rx="4" fill="#7dd3fc" opacity="0.6" />
-      <ellipse cx="24" cy="40" rx="3" ry="7" fill="#fff" opacity="0.7" />
-    </svg>
-  );
-}
 
 export default function Home() {
   const catalog = useStorefrontCatalog();
@@ -139,7 +129,9 @@ export default function Home() {
               {p.tag && <span className="inline-block text-xs font-extrabold text-white rounded-full px-3 py-1 mb-4 clay-btn-primary">
                 {p.tag}
               </span>}
-              {p.kind !== 'bottle' && <Jug />}
+              {productImage(p) && <div className="clay-inset rounded-2xl h-36 p-3 mb-4 grid place-items-center overflow-hidden">
+                <Image src={productImage(p)} alt="" width={184} height={120} data-product-image={p.id} style={{ width: '100%', height: 120, objectFit: 'contain' }} />
+              </div>}
               <h3 className="font-editorial text-lg font-bold text-clay-ink mt-3 mb-1">{p.name}</h3>
               <p className="font-editorial text-3xl font-bold text-clay-skydeep mb-1">₱{p.refill}</p>
               <p className="text-xs font-bold text-clay-muted mb-5">
