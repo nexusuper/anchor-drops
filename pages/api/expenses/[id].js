@@ -25,7 +25,8 @@ export default async function handler(req, res) {
   const { error } = await supabase.from('expenses').delete().eq('id', id).eq('branch_id', DEFAULT_BRANCH_ID);
   if (error) {
     console.error('Expense delete failed:', error);
-    return res.status(500).json({ error: 'Failed to delete expense' });
+    return res.status(error.code === '23503' ? 409 : 500).json({ error: error.code === '23503'
+      ? 'This expense is matched to a card statement and must remain in the audit trail.' : 'Failed to delete expense' });
   }
   if (expense.receipt_path) {
     await supabase.storage.from('expense-receipts').remove([expense.receipt_path]);

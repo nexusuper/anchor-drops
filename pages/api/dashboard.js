@@ -55,7 +55,11 @@ export default async function handler(req, res) {
       .eq('branch_id', DEFAULT_BRANCH_ID)
       .gte('spent_at', monthStart);
     if (expErr) throw expErr;
-    const expensesThisMonth = (expenseRows || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const { data: refunds, error: refundErr } = await supabase.from('card_statement_entries').select('amount')
+      .eq('branch_id', DEFAULT_BRANCH_ID).eq('kind', 'refund').gte('statement_date', monthStart);
+    if (refundErr) throw refundErr;
+    const expensesThisMonth = (expenseRows || []).reduce((s, e) => s + (Number(e.amount) || 0), 0)
+      - (refunds || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const netThisMonth = revenueThisMonth - expensesThisMonth;
 
     const { data: statusRows, error: statusErr } = await supabase.from('orders').select('status');
